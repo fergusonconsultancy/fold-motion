@@ -53,6 +53,13 @@ class FoldMotionService : Service(), SensorEventListener {
             if (inner != currentInner) {
                 currentInner = inner
                 arrivalAt = SystemClock.uptimeMillis()
+                recordSwitchAngle(inner)
+                // Paint the arriving screen dark and frosted on its very first frame
+                overlay?.let {
+                    it.visibility = View.VISIBLE
+                    it.update(1f, FoldMath.clamp(angle / 180f), 1f)
+                }
+                setWindowAlpha(1f)
                 startTicking()
             }
         }
@@ -232,9 +239,27 @@ class FoldMotionService : Service(), SensorEventListener {
 
         val intensity = maxOf(motion * settle, arrival)
 
-        if (intensity > 0.002f) {
+        // Darkness: inner fades to black near the switch angle, and the
+        // arriving screen lifts out of black at the start of its arrival.
+        val closingDark = if (!currentInner) 0f else 1f - FoldMath.smooth(
+            FoldMath.clamp(
+                (angle - MotionConfig.CLOSE_FADE_END_DEG) /
+                    (MotionConfig.CLOSE_FADE_START_DEG - MotionConfig.CLOSE_FADE_END_DEG)
+            )
+        )
+        val arrivalDark = if (arrivalAt == 0L) 0f else 1f - FoldMath.glide(
+            FoldMath.clamp(sinceSwitch.toFloat() / (MotionConfig.ARRIVAL_MS * MotionConfig.ARRIVAL_DARK_SHARE))
+        )
+        // settle stops the screen staying black if the phone is held nearly shut
+        val darkness = maxOf(closingDark * settle, arrivalDark)
+
+        // Full opacity is only allowed while dark, when nobody is tapping;
+        // otherwise stay under Android's 80% touch-through limit.
+        setWindowAlpha(if (darkness > 0.05f) 1f else MotionConfig.MAX_WINDOW_ALPHA)
+
+        if (intensity > 0.002f || darkness > 0.002f) {
             if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
-            view.update(intensity, progress)
+            view.update(intensity, progress, darkness)
             val radiusPx = (MotionConfig.PEAK_BLUR_DP * resources.displayMetrics.density * intensity).roundToInt()
             applyBlur(radiusPx)
             Choreographer.getInstance().postFrameCallback(frameCallback)
@@ -246,10 +271,24 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private fun hideNow() {
         overlay?.let {
-            it.update(0f, 0f)
+            it.update(0f, 0f, 0f)
             it.visibility = View.GONE
         }
         applyBlur(0)
+        setWindowAlpha(MotionConfig.MAX_WINDOW_ALPHA)
+    }
+
+    private fun setWindowAlpha(alpha: Float) {
+        val view = overlay ?: return
+        if (!::params.isInitialized || params.alpha == alpha) return
+        params.alpha = alpha
+        runCatching { windowManager.updateViewLayout(view, params) }
+    }
+
+    /** Saves the hinge angle at each screen switch so the fade can be tuned to this phone. */
+    private fun recordSwitchAngle(toInner: Boolean) {
+        val key = if (toInner) "switch_opening_deg" else "switch_closing_deg"
+        getSharedPreferences("fold_motion", MODE_PRIVATE).edit().putFloat(key, angle).apply()
     }
 
     // endregion

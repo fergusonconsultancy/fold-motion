@@ -124,6 +124,13 @@ class MainActivity : Activity(), SensorEventListener {
         status.text = buildString {
             appendLine(if (hingeSensor != null) "Hinge sensor: found" else "Hinge sensor: NOT found on this phone")
             appendLine(if (overlayOk) "Display over other apps: allowed" else "Display over other apps: tap the first button")
+            val prefs = getSharedPreferences("fold_motion", MODE_PRIVATE)
+            val closing = prefs.getFloat("switch_closing_deg", -1f)
+            val opening = prefs.getFloat("switch_opening_deg", -1f)
+            appendLine(
+                "Screen switch: closing " + (if (closing >= 0) "${closing.toInt()}°" else "not seen yet") +
+                    ", opening " + (if (opening >= 0) "${opening.toInt()}°" else "not seen yet")
+            )
             appendLine(
                 if (blurOk) "Live blur: supported"
                 else "Live blur: off. Frost only until it turns on.\n" +

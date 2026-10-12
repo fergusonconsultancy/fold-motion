@@ -18,6 +18,8 @@ class FoldOverlayView(context: Context) : View(context) {
 
     private var intensity = 0f
     private var progress = 0f
+    private var darkness = 0f
+    private val darkPaint = Paint().apply { color = Color.BLACK }
 
     private val frostPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val veilPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -26,9 +28,10 @@ class FoldOverlayView(context: Context) : View(context) {
     val isInnerDisplay: Boolean
         get() = width > 0 && height > 0 && FoldMath.isInnerShape(width.toFloat(), height.toFloat())
 
-    fun update(intensity: Float, progress: Float) {
+    fun update(intensity: Float, progress: Float, darkness: Float = 0f) {
         this.intensity = intensity
         this.progress = progress
+        this.darkness = darkness
         invalidate()
     }
 
@@ -53,9 +56,14 @@ class FoldOverlayView(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (intensity <= 0f) return
+        if (intensity <= 0f && darkness <= 0f) return
         val w = width.toFloat()
         val h = height.toFloat()
+
+        // Fade to and from black so the panel switch reads as one motion
+        if (darkness > 0f) {
+            darkPaint.alpha = (255 * FoldMath.clamp(darkness)).toInt()
+        }
 
         // Veil over the moving (right) half of the inner screen
         if (isInnerDisplay) {
@@ -66,5 +74,7 @@ class FoldOverlayView(context: Context) : View(context) {
 
         frostPaint.alpha = (255 * FoldMath.clamp(MotionConfig.FROST * intensity)).toInt()
         canvas.drawRect(0f, 0f, w, h, frostPaint)
+
+        if (darkness > 0f) canvas.drawRect(0f, 0f, w, h, darkPaint)
     }
 }

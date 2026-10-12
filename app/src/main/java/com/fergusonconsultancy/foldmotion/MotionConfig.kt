@@ -30,6 +30,17 @@ object MotionConfig {
      */
     const val ARRIVAL_MS = 1275L
 
+    /** Share of ARRIVAL_MS spent lifting out of black before the frost clears. */
+    const val ARRIVAL_DARK_SHARE = 0.35f
+
+    /**
+     * Closing: the inner screen fades to black between these angles so it
+     * meets the panel switch already dark. Tune END to the switch angle
+     * the app records (shown on its home screen).
+     */
+    const val CLOSE_FADE_START_DEG = 35f
+    const val CLOSE_FADE_END_DEG = 10f
+
     /** Hinge must sit still this long before the settle starts. */
     const val HOLD_MS = 300L
 
