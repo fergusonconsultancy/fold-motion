@@ -1,25 +1,34 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * Seam Close, both directions. Chosen in Fold Motion Studio on 12 Oct 2026:
- *   closingEffect "seam", openingEffect "seam", effectMs 550, previewed at 1x
+ * Chosen in Fold Motion Studio on 12 Oct 2026:
+ *   closingEffect "roll", openingEffect "slide", effectMs 600, previewed at 1x
  *
- * The effect only ever plays on the screen being folded away and finishes in
- * black before One UI switches panels. The arriving screen is always clean.
- * Durations follow Developer options > Animator duration scale.
+ * Both travel right to left. Effects only ever play on the screen being
+ * folded away and finish dark before One UI switches panels. The arriving
+ * screen is always clean. Durations follow Developer options > Animator
+ * duration scale.
  */
 object MotionConfig {
-    /** Closing: panels close from both outer edges to the crease. */
-    const val EFFECT_MS = 550L
+    enum class Effect { ROLL, SLIDE }
+
+    /** Inner screen folding shut. */
+    val CLOSING_EFFECT = Effect.ROLL
+
+    /** Cover screen as you open the phone. */
+    val OPENING_EFFECT = Effect.SLIDE
+
+    /** Effect length before Animator duration scale. */
+    const val EFFECT_MS = 600L
 
     /**
-     * Opening: One UI switches to the inner screen roughly 170 to 300ms after
-     * the hinge reports 90 degrees (measured on this phone, it varies). The
-     * cover sweep is squeezed to finish inside that.
+     * One UI switches to the inner screen roughly 170 to 300ms after the hinge
+     * reports 90 degrees when opening (measured on this phone, it varies). The
+     * opening effect is squeezed to finish inside that.
      */
     const val OPENING_FIT_MS = 150L
 
-    /** Stay black this long after the effect if no screen switch follows, then fade out. */
+    /** Stay covered this long after the effect if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L
     const val FADE_MS = 200L
 
