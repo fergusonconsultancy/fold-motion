@@ -1,0 +1,237 @@
+package com.fergusonconsultancy.foldmotion
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ServiceInfo
+import android.graphics.PixelFormat
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.os.IBinder
+import android.os.SystemClock
+import android.provider.Settings
+import android.view.Choreographer
+import android.view.Display
+import android.view.View
+import android.view.WindowManager
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+class FoldMotionService : Service(), SensorEventListener {
+
+    private lateinit var sensorManager: SensorManager
+    private var hingeSensor: Sensor? = null
+
+    private lateinit var windowManager: WindowManager
+    private var overlay: FoldOverlayView? = null
+    private lateinit var params: WindowManager.LayoutParams
+    private var blurSupported = false
+    private var lastBlurRadius = -1
+
+    private var angle = 0f
+    private var anchorAngle = 0f
+    private var lastMoveAt = 0L
+    private var ticking = false
+
+    private val frameCallback = Choreographer.FrameCallback { onFrame() }
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> stopListening()
+                Intent.ACTION_SCREEN_ON -> startListening()
+            }
+        }
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        startAsForeground()
+
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return
+        }
+
+        sensorManager = getSystemService(SensorManager::class.java)
+        hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
+        if (hingeSensor == null) {
+            stopSelf()
+            return
+        }
+
+        addOverlay()
+        startListening()
+        registerReceiver(screenReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        })
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+
+    override fun onDestroy() {
+        stopListening()
+        runCatching { unregisterReceiver(screenReceiver) }
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
+        overlay?.let { runCatching { windowManager.removeView(it) } }
+        overlay = null
+        super.onDestroy()
+    }
+
+    // region Overlay
+
+    private fun addOverlay() {
+        // One logical display follows whichever panel is active, so a single
+        // overlay on the default display covers both cover and inner screens.
+        val display = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+        val windowContext = createWindowContext(display, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
+        windowManager = windowContext.getSystemService(WindowManager::class.java)
+
+        params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            alpha = MotionConfig.MAX_WINDOW_ALPHA
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            title = "FoldMotionOverlay"
+        }
+
+        blurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            windowManager.isCrossWindowBlurEnabled
+
+        overlay = FoldOverlayView(windowContext).also {
+            it.visibility = View.GONE
+            windowManager.addView(it, params)
+        }
+    }
+
+    private fun applyBlur(radius: Int) {
+        if (!blurSupported || radius == lastBlurRadius) return
+        val view = overlay ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (radius > 0) {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                params.blurBehindRadius = radius
+            } else {
+                params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+                params.blurBehindRadius = 0
+            }
+            runCatching { windowManager.updateViewLayout(view, params) }
+        }
+        lastBlurRadius = radius
+    }
+
+    // endregion
+
+    // region Hinge sensor
+
+    private fun startListening() {
+        hingeSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+    }
+
+    private fun stopListening() {
+        if (::sensorManager.isInitialized) sensorManager.unregisterListener(this)
+        hideNow()
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        angle = event.values[0]
+        if (abs(angle - anchorAngle) > MotionConfig.MOVE_THRESHOLD_DEG) {
+            anchorAngle = angle
+            lastMoveAt = SystemClock.uptimeMillis()
+        }
+        startTicking()
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+    // endregion
+
+    // region Animation loop
+
+    private fun startTicking() {
+        if (ticking) return
+        ticking = true
+        Choreographer.getInstance().postFrameCallback(frameCallback)
+    }
+
+    private fun onFrame() {
+        val view = overlay ?: run { ticking = false; return }
+        val progress = FoldMath.clamp(angle / 180f)
+
+        // Fade the effect out once the hinge sits still, so Flex mode
+        // (phone held half open) does not leave the screen blurred.
+        val still = SystemClock.uptimeMillis() - lastMoveAt
+        val settle = if (still < MotionConfig.HOLD_MS) 1f
+        else 1f - FoldMath.glide(FoldMath.clamp((still - MotionConfig.HOLD_MS).toFloat() / MotionConfig.SETTLE_MS))
+
+        val inner = if (view.width > 0) view.isInnerDisplay else progress > 0.5f
+        val motion = if (inner) FoldMath.innerMotion(progress) else FoldMath.coverMotion(progress)
+        val intensity = motion * settle
+
+        if (intensity > 0.002f) {
+            if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
+            view.update(intensity, progress)
+            val radiusPx = (MotionConfig.PEAK_BLUR_DP * resources.displayMetrics.density * intensity).roundToInt()
+            applyBlur(radiusPx)
+            Choreographer.getInstance().postFrameCallback(frameCallback)
+        } else {
+            hideNow()
+            ticking = false
+        }
+    }
+
+    private fun hideNow() {
+        overlay?.let {
+            it.update(0f, 0f)
+            it.visibility = View.GONE
+        }
+        applyBlur(0)
+    }
+
+    // endregion
+
+    // region Foreground notification
+
+    private fun startAsForeground() {
+        val channelId = "fold_motion"
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(channelId, "Fold Motion", NotificationManager.IMPORTANCE_LOW)
+        )
+        val notification = Notification.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.ic_menu_rotate)
+            .setContentTitle("Fold Motion is running")
+            .setContentText("Animating your fold and unfold")
+            .setOngoing(true)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(1, notification)
+        }
+    }
+
+    // endregion
+}
