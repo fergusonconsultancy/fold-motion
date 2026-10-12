@@ -42,7 +42,13 @@ object MotionConfig {
     const val CLOSE_FADE_END_DEG = 10f
 
     /** Hinge must sit still this long before the settle starts. */
-    const val HOLD_MS = 300L
+    const val HOLD_MS = 600L
+
+    /**
+     * The Fold8 Ultra hinge sensor only reports 0, 90 and 180 degrees.
+     * The app glides between those steps over this time to fake a smooth fold.
+     */
+    const val TWEEN_MS = 450L
 
     /** Ignore hinge jitter smaller than this, in degrees. */
     const val MOVE_THRESHOLD_DEG = 1.5f

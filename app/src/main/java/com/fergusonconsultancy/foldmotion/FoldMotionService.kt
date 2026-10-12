@@ -199,13 +199,38 @@ class FoldMotionService : Service(), SensorEventListener {
         hideNow()
     }
 
+    // On the Fold8 Ultra the hinge sensor only reports 0, 90 and 180 degrees.
+    // Each step becomes a target, and `angle` glides smoothly towards it.
+    private var rawAngle = 0f
+    private var tweenFrom = 0f
+    private var tweenStart = 0L
+    private var lastStepAt = 0L
+
     override fun onSensorChanged(event: SensorEvent) {
-        angle = event.values[0]
-        if (abs(angle - anchorAngle) > MotionConfig.MOVE_THRESHOLD_DEG) {
-            anchorAngle = angle
-            lastMoveAt = SystemClock.uptimeMillis()
+        val raw = event.values[0]
+        val now = SystemClock.uptimeMillis()
+        if (lastStepAt == 0L) {
+            // First reading: jump straight there, no animation on start
+            rawAngle = raw; angle = raw; anchorAngle = raw; lastStepAt = now
+            return
         }
-        startTicking()
+        if (abs(raw - anchorAngle) > MotionConfig.MOVE_THRESHOLD_DEG) {
+            anchorAngle = raw
+            tweenFrom = angle
+            rawAngle = raw
+            tweenStart = now
+            lastStepAt = now
+            lastMoveAt = now
+            startTicking()
+        }
+    }
+
+    private fun tweenActive(now: Long) = tweenStart != 0L && now - tweenStart < MotionConfig.TWEEN_MS
+
+    private fun advanceTween(now: Long) {
+        if (tweenStart == 0L) { angle = rawAngle; return }
+        val t = FoldMath.clamp((now - tweenStart).toFloat() / MotionConfig.TWEEN_MS)
+        angle = tweenFrom + (rawAngle - tweenFrom) * FoldMath.glide(t)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -222,6 +247,8 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private fun onFrame() {
         val view = overlay ?: run { ticking = false; return }
+        val now = SystemClock.uptimeMillis()
+        advanceTween(now)
         val progress = FoldMath.clamp(angle / 180f)
 
         // Fade the effect out once the hinge sits still, so Flex mode
@@ -257,7 +284,7 @@ class FoldMotionService : Service(), SensorEventListener {
         // otherwise stay under Android's 80% touch-through limit.
         setWindowAlpha(if (darkness > 0.05f) 1f else MotionConfig.MAX_WINDOW_ALPHA)
 
-        if (intensity > 0.002f || darkness > 0.002f) {
+        if (intensity > 0.002f || darkness > 0.002f || tweenActive(now)) {
             if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
             view.update(intensity, progress, darkness)
             val radiusPx = (MotionConfig.PEAK_BLUR_DP * resources.displayMetrics.density * intensity).roundToInt()
@@ -287,8 +314,14 @@ class FoldMotionService : Service(), SensorEventListener {
 
     /** Saves the hinge angle at each screen switch so the fade can be tuned to this phone. */
     private fun recordSwitchAngle(toInner: Boolean) {
-        val key = if (toInner) "switch_opening_deg" else "switch_closing_deg"
-        getSharedPreferences("fold_motion", MODE_PRIVATE).edit().putFloat(key, angle).apply()
+        // The sensor is stepped, so also record how long after the last
+        // step the screens switched. That timing is what the fade needs.
+        val dir = if (toInner) "opening" else "closing"
+        val msAfterStep = if (lastStepAt == 0L) -1L else SystemClock.uptimeMillis() - lastStepAt
+        getSharedPreferences("fold_motion", MODE_PRIVATE).edit()
+            .putFloat("switch_${dir}_deg", rawAngle)
+            .putLong("switch_${dir}_ms", msAfterStep)
+            .apply()
     }
 
     // endregion

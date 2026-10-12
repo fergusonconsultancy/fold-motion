@@ -78,7 +78,11 @@ class MainActivity : Activity(), SensorEventListener {
             refresh()
         })
 
-        setContentView(root)
+        // Scrolls, so a long sensor list never pushes the buttons off screen
+        setContentView(android.widget.ScrollView(this).apply {
+            setBackgroundColor(Color.rgb(15, 16, 20))
+            addView(root)
+        })
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -125,12 +129,20 @@ class MainActivity : Activity(), SensorEventListener {
             appendLine(if (hingeSensor != null) "Hinge sensor: found" else "Hinge sensor: NOT found on this phone")
             appendLine(if (overlayOk) "Display over other apps: allowed" else "Display over other apps: tap the first button")
             val prefs = getSharedPreferences("fold_motion", MODE_PRIVATE)
-            val closing = prefs.getFloat("switch_closing_deg", -1f)
-            val opening = prefs.getFloat("switch_opening_deg", -1f)
-            appendLine(
-                "Screen switch: closing " + (if (closing >= 0) "${closing.toInt()}°" else "not seen yet") +
-                    ", opening " + (if (opening >= 0) "${opening.toInt()}°" else "not seen yet")
-            )
+            for (dir in listOf("closing", "opening")) {
+                val deg = prefs.getFloat("switch_${dir}_deg", -1f)
+                val ms = prefs.getLong("switch_${dir}_ms", -1L)
+                appendLine(
+                    "Switch when $dir: " +
+                        if (deg < 0) "not seen yet" else "${deg.toInt()}°, ${ms}ms after the last hinge step"
+                )
+            }
+            appendLine()
+            appendLine("Hinge-related sensors on this phone:")
+            val keywords = listOf("hinge", "fold", "angle", "flip", "hall", "posture")
+            sensorManager.getSensorList(Sensor.TYPE_ALL)
+                .filter { s -> keywords.any { s.name.contains(it, ignoreCase = true) || s.stringType.contains(it, ignoreCase = true) } }
+                .forEach { appendLine("• ${it.name} (${it.stringType}, type ${it.type}, resolution ${it.resolution})") }
             appendLine(
                 if (blurOk) "Live blur: supported"
                 else "Live blur: off. Frost only until it turns on.\n" +
