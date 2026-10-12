@@ -12,11 +12,26 @@ android {
         // Hinge angle sensor arrived in Android 11 (API 30)
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Each GitHub build gets a higher number so it installs as an update
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+        versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+    }
+
+    // One fixed key for every build, so new APKs install over the old one.
+    // Debug-only key for personal sideloading. Never use it for a store release.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("signing/foldmotion-debug.jks")
+            storePassword = "foldmotion"
+            keyAlias = "foldmotion"
+            keyPassword = "foldmotion"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
         }
