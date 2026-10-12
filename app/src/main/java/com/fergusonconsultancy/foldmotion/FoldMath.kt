@@ -18,6 +18,9 @@ object FoldMath {
     /** Blur on the cover display while it opens. Peaks by about 80 degrees. */
     fun coverMotion(progress: Float): Float = smooth(clamp(progress / 0.45f))
 
+    /** Inner screen is near square; the cover is tall and narrow (about 0.46). */
+    fun isInnerShape(w: Float, h: Float): Boolean = min(w, h) / max(w, h) > 0.75f
+
     /** Blur on the inner display, fading out as it reaches flat. */
     fun innerMotion(progress: Float): Float = smooth(clamp((1f - progress) / 0.55f))
 }

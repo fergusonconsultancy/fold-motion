@@ -42,6 +42,25 @@ class FoldMotionService : Service(), SensorEventListener {
     private var lastMoveAt = 0L
     private var ticking = false
 
+    // Which panel is showing, and when One UI last switched between them
+    private var currentInner = false
+    private var arrivalAt = 0L
+    private var windowContext: Context? = null
+
+    private val displayCallbacks = object : android.content.ComponentCallbacks {
+        override fun onConfigurationChanged(config: android.content.res.Configuration) {
+            val inner = FoldMath.isInnerShape(config.screenWidthDp.toFloat(), config.screenHeightDp.toFloat())
+            if (inner != currentInner) {
+                currentInner = inner
+                arrivalAt = SystemClock.uptimeMillis()
+                startTicking()
+            }
+        }
+
+        @Deprecated("Required override")
+        override fun onLowMemory() = Unit
+    }
+
     private val frameCallback = Choreographer.FrameCallback { onFrame() }
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -88,6 +107,7 @@ class FoldMotionService : Service(), SensorEventListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && overlay != null) {
             runCatching { windowManager.removeCrossWindowBlurEnabledListener(blurListener) }
         }
+        windowContext?.let { runCatching { it.unregisterComponentCallbacks(displayCallbacks) } }
         overlay?.let { runCatching { windowManager.removeView(it) } }
         overlay = null
         super.onDestroy()
@@ -101,6 +121,12 @@ class FoldMotionService : Service(), SensorEventListener {
         val display = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
         val windowContext = createWindowContext(display, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
         windowManager = windowContext.getSystemService(WindowManager::class.java)
+        this.windowContext = windowContext
+
+        // Watch for One UI switching between cover and inner screens
+        val config = windowContext.resources.configuration
+        currentInner = FoldMath.isInnerShape(config.screenWidthDp.toFloat(), config.screenHeightDp.toFloat())
+        windowContext.registerComponentCallbacks(displayCallbacks)
 
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -197,9 +223,14 @@ class FoldMotionService : Service(), SensorEventListener {
         val settle = if (still < MotionConfig.HOLD_MS) 1f
         else 1f - FoldMath.glide(FoldMath.clamp((still - MotionConfig.HOLD_MS).toFloat() / MotionConfig.SETTLE_MS))
 
-        val inner = if (view.width > 0) view.isInnerDisplay else progress > 0.5f
-        val motion = if (inner) FoldMath.innerMotion(progress) else FoldMath.coverMotion(progress)
-        val intensity = motion * settle
+        val motion = if (currentInner) FoldMath.innerMotion(progress) else FoldMath.coverMotion(progress)
+
+        // The screen One UI just switched to arrives frosted and clears
+        val sinceSwitch = SystemClock.uptimeMillis() - arrivalAt
+        val arrival = if (arrivalAt == 0L) 0f
+        else 1f - FoldMath.glide(FoldMath.clamp(sinceSwitch.toFloat() / MotionConfig.ARRIVAL_MS))
+
+        val intensity = maxOf(motion * settle, arrival)
 
         if (intensity > 0.002f) {
             if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE

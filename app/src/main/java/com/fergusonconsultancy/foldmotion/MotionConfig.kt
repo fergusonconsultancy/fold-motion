@@ -24,6 +24,12 @@ object MotionConfig {
      */
     const val SETTLE_MS = 1275L
 
+    /**
+     * When One UI hands over to the other screen, that screen arrives
+     * frosted and clears over this time. This is the studio durationMs.
+     */
+    const val ARRIVAL_MS = 1275L
+
     /** Hinge must sit still this long before the settle starts. */
     const val HOLD_MS = 300L
 

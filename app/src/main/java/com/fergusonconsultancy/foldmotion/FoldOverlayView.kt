@@ -20,11 +20,11 @@ class FoldOverlayView(context: Context) : View(context) {
     private var progress = 0f
 
     private val frostPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val veilPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(15, 16, 20) }
+    private val veilPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    /** True when the window is the near-square inner display. */
+    /** True when the window is the near-square inner display, in any orientation. */
     val isInnerDisplay: Boolean
-        get() = width > 0 && height > 0 && width.toFloat() / height > 0.75f
+        get() = width > 0 && height > 0 && FoldMath.isInnerShape(width.toFloat(), height.toFloat())
 
     fun update(intensity: Float, progress: Float) {
         this.intensity = intensity
@@ -44,6 +44,12 @@ class FoldOverlayView(context: Context) : View(context) {
             floatArrayOf(0f, 0.45f, 1f),
             Shader.TileMode.CLAMP
         )
+        // Veil fades in across the crease instead of starting on a hard line
+        veilPaint.shader = LinearGradient(
+            w * 0.40f, 0f, w * 0.62f, 0f,
+            Color.argb(0, 15, 16, 20), Color.argb(255, 15, 16, 20),
+            Shader.TileMode.CLAMP
+        )
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -55,7 +61,7 @@ class FoldOverlayView(context: Context) : View(context) {
         if (isInnerDisplay) {
             val veil = MotionConfig.SEE_THROUGH * sin(PI.toFloat() * progress) * intensity
             veilPaint.alpha = (255 * FoldMath.clamp(veil)).toInt()
-            canvas.drawRect(w / 2f, 0f, w, h, veilPaint)
+            canvas.drawRect(w * 0.40f, 0f, w, h, veilPaint)
         }
 
         frostPaint.alpha = (255 * FoldMath.clamp(MotionConfig.FROST * intensity)).toInt()
