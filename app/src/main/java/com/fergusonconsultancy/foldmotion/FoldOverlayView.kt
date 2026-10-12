@@ -5,76 +5,142 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.Shader
 import android.view.View
-import kotlin.math.PI
-import kotlin.math.sin
 
 /**
- * Full-screen, non-touchable layer that draws the frost and the veil.
- * The real blur comes from the window's blur-behind setting in the service.
+ * Full-screen, non-touchable glass layer.
+ *
+ * Draws a frosted pane, masked by a moving feathered edge, with a band of
+ * light riding that edge. The service picks the shape and drives `t`.
  */
 class FoldOverlayView(context: Context) : View(context) {
 
-    private var intensity = 0f
-    private var progress = 0f
-    private var darkness = 0f
-    private val darkPaint = Paint().apply { color = Color.BLACK }
+    enum class Shape {
+        /** Frost fills from the left (hinge) edge across. */
+        FILL_FROM_HINGE,
+        /** Frost clears from the left (hinge) edge across. */
+        REVEAL_FROM_HINGE,
+        /** Frost spreads outward from the crease. */
+        FILL_FROM_CREASE,
+        /** Frost clears outward from the crease. */
+        REVEAL_FROM_CREASE,
+        /** Whole screen frosted. */
+        FULL
+    }
+
+    private var shape = Shape.FULL
+    private var t = 0f
+    private var alphaAll = 0f
+    private var sheen = 0f
 
     private val frostPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val veilPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+    }
+    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    /** True when the window is the near-square inner display, in any orientation. */
-    val isInnerDisplay: Boolean
-        get() = width > 0 && height > 0 && FoldMath.isInnerShape(width.toFloat(), height.toFloat())
+    private val opaque = Color.BLACK
+    private val clear = Color.TRANSPARENT
 
-    fun update(intensity: Float, progress: Float, darkness: Float = 0f) {
-        this.intensity = intensity
-        this.progress = progress
-        this.darkness = darkness
+    fun show(shape: Shape, t: Float, alpha: Float, sheen: Float) {
+        this.shape = shape
+        this.t = FoldMath.clamp(t)
+        this.alphaAll = FoldMath.clamp(alpha)
+        this.sheen = FoldMath.clamp(sheen)
+        invalidate()
+    }
+
+    fun clearAll() {
+        alphaAll = 0f
         invalidate()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        // Diagonal glass sheen: white into the Violet Shadow tint
+        // Glass: bright top-left, Violet Shadow tint through the middle, cool at the base
         frostPaint.shader = LinearGradient(
             0f, 0f, w.toFloat(), h.toFloat(),
             intArrayOf(
-                Color.argb(150, 255, 255, 255),
-                Color.argb(80, 179, 166, 242),
-                Color.argb(25, 255, 255, 255)
+                Color.argb(205, 246, 244, 252),
+                Color.argb(170, 196, 186, 240),
+                Color.argb(150, 120, 112, 160)
             ),
-            floatArrayOf(0f, 0.45f, 1f),
-            Shader.TileMode.CLAMP
-        )
-        // Veil fades in across the crease instead of starting on a hard line
-        veilPaint.shader = LinearGradient(
-            w * 0.40f, 0f, w * 0.62f, 0f,
-            Color.argb(0, 15, 16, 20), Color.argb(255, 15, 16, 20),
+            floatArrayOf(0f, 0.5f, 1f),
             Shader.TileMode.CLAMP
         )
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (intensity <= 0f && darkness <= 0f) return
+        if (alphaAll <= 0.001f) return
         val w = width.toFloat()
         val h = height.toFloat()
+        val feather = w * 0.22f
+        val c = w / 2f
 
-        // Fade to and from black so the panel switch reads as one motion
-        if (darkness > 0f) {
-            darkPaint.alpha = (255 * FoldMath.clamp(darkness)).toInt()
-        }
-
-        // Veil over the moving (right) half of the inner screen
-        if (isInnerDisplay) {
-            val veil = MotionConfig.SEE_THROUGH * sin(PI.toFloat() * progress) * intensity
-            veilPaint.alpha = (255 * FoldMath.clamp(veil)).toInt()
-            canvas.drawRect(w * 0.40f, 0f, w, h, veilPaint)
-        }
-
-        frostPaint.alpha = (255 * FoldMath.clamp(MotionConfig.FROST * intensity)).toInt()
+        // 1. Frost, masked by the moving edge
+        val layer = canvas.saveLayer(0f, 0f, w, h, null)
+        frostPaint.alpha = (255 * FoldMath.clamp(MotionConfig.FROST * alphaAll)).toInt()
         canvas.drawRect(0f, 0f, w, h, frostPaint)
 
-        if (darkness > 0f) canvas.drawRect(0f, 0f, w, h, darkPaint)
+        val edges = mutableListOf<Float>()
+        when (shape) {
+            Shape.FULL -> Unit
+            Shape.FILL_FROM_HINGE -> {
+                val e = t * (w + feather)
+                mask(canvas, e - feather, opaque, e, clear, 0f, w, h)
+                edges += e - feather / 2f
+            }
+            Shape.REVEAL_FROM_HINGE -> {
+                val e = t * (w + feather)
+                mask(canvas, e - feather, clear, e, opaque, 0f, w, h)
+                edges += e - feather / 2f
+            }
+            Shape.FILL_FROM_CREASE -> {
+                val r = t * (c + feather)
+                // left half: frost where x > c - r
+                mask(canvas, c - r, clear, c - r + feather, opaque, 0f, c, h)
+                mirrored(canvas, c) { mask(canvas, c - r, clear, c - r + feather, opaque, 0f, c, h) }
+                edges += c - r + feather / 2f; edges += c + r - feather / 2f
+            }
+            Shape.REVEAL_FROM_CREASE -> {
+                val r = t * (c + feather)
+                // left half: frost where x < c - r
+                mask(canvas, c - r, opaque, c - r + feather, clear, 0f, c, h)
+                mirrored(canvas, c) { mask(canvas, c - r, opaque, c - r + feather, clear, 0f, c, h) }
+                edges += c - r + feather / 2f; edges += c + r - feather / 2f
+            }
+        }
+        canvas.restoreToCount(layer)
+
+        // 2. A band of light riding each moving edge
+        if (sheen > 0.01f) {
+            val band = w * 0.10f
+            val peak = (150 * sheen * alphaAll).toInt()
+            for (x in edges) {
+                if (x < -band || x > w + band) continue
+                sheenPaint.shader = LinearGradient(
+                    x - band, 0f, x + band, 0f,
+                    intArrayOf(Color.argb(0, 255, 255, 255), Color.argb(peak, 255, 255, 255), Color.argb(0, 255, 255, 255)),
+                    floatArrayOf(0f, 0.5f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                canvas.drawRect(x - band, 0f, x + band, h, sheenPaint)
+            }
+        }
+    }
+
+    /** Keeps frost only where the gradient is opaque, across [left, right]. */
+    private fun mask(canvas: Canvas, x0: Float, c0: Int, x1: Float, c1: Int, left: Float, right: Float, h: Float) {
+        maskPaint.shader = LinearGradient(x0, 0f, x1, 0f, c0, c1, Shader.TileMode.CLAMP)
+        canvas.drawRect(left, 0f, right, h, maskPaint)
+    }
+
+    private inline fun mirrored(canvas: Canvas, c: Float, block: () -> Unit) {
+        val s = canvas.save()
+        canvas.scale(-1f, 1f, c, 0f)
+        block()
+        canvas.restoreToCount(s)
     }
 }

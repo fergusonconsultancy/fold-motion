@@ -25,9 +25,6 @@ class MainActivity : Activity(), SensorEventListener {
     private lateinit var angleText: TextView
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
-    private var fineSensor: Sensor? = null
-    private var stdValue = "--"
-    private var fineValue = "no data yet"
 
     private val ink = Color.rgb(236, 232, 223)
     private val muted = Color.rgb(154, 151, 166)
@@ -37,8 +34,6 @@ class MainActivity : Activity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         sensorManager = getSystemService(SensorManager::class.java)
         hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
-        fineSensor = sensorManager.getSensorList(Sensor.TYPE_ALL)
-            .firstOrNull { it.stringType == MotionConfig.SAMSUNG_FOLDING_ANGLE }
 
         val pad = (24 * resources.displayMetrics.density).toInt()
         val root = LinearLayout(this).apply {
@@ -111,7 +106,6 @@ class MainActivity : Activity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         hingeSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
-        fineSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             windowManager.addCrossWindowBlurEnabledListener(blurListener)
         }
@@ -143,12 +137,15 @@ class MainActivity : Activity(), SensorEventListener {
                         if (deg < 0) "not seen yet" else "${deg.toInt()}°, ${ms}ms after the last hinge step"
                 )
             }
-            appendLine()
-            appendLine("Hinge-related sensors on this phone:")
-            val keywords = listOf("hinge", "fold", "angle", "flip", "hall", "posture")
-            sensorManager.getSensorList(Sensor.TYPE_ALL)
-                .filter { s -> keywords.any { s.name.contains(it, ignoreCase = true) || s.stringType.contains(it, ignoreCase = true) } }
-                .forEach { appendLine("• ${it.name} (${it.stringType}, type ${it.type}, resolution ${it.resolution})") }
+            val scale = runCatching {
+                Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+            }.getOrDefault(1f)
+            appendLine(
+                if (scale <= 0f) "Animator duration scale: off, so the transition is skipped"
+                else "Animator duration scale: ${scale}x (Developer options)"
+            )
+            val topHz = display?.supportedModes?.maxOfOrNull { it.refreshRate }?.toInt()
+            appendLine("Animates at up to ${topHz ?: "?"}Hz")
             appendLine(
                 if (blurOk) "Live blur: supported"
                 else "Live blur: off. Frost only until it turns on.\n" +
@@ -159,12 +156,7 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor == fineSensor) {
-            fineValue = "%.1f°".format(event.values[0])
-        } else {
-            stdValue = "${event.values[0].toInt()}°"
-        }
-        angleText.text = "Samsung fine: $fineValue\nAndroid standard: $stdValue"
+        angleText.text = "Hinge: ${event.values[0].toInt()}°"
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
