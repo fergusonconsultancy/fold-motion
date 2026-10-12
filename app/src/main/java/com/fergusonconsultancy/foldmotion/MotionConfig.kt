@@ -50,6 +50,18 @@ object MotionConfig {
      */
     const val TWEEN_MS = 450L
 
+    /** With Samsung's fine sensor, only a light smoothing against jitter. */
+    const val TWEEN_FINE_MS = 70L
+
+    /** Samsung's continuous folding angle sensor (0.01° resolution on the Fold8 Ultra). */
+    const val SAMSUNG_FOLDING_ANGLE = "com.samsung.sensor.folding_angle"
+
+    /**
+     * Fade through black around the panel switch. Off: on hardware it
+     * lengthened the dark gap instead of hiding it.
+     */
+    const val BRIDGE_THROUGH_BLACK = false
+
     /** Ignore hinge jitter smaller than this, in degrees. */
     const val MOVE_THRESHOLD_DEG = 1.5f
 

@@ -30,6 +30,8 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
+    private var fineSensor: Sensor? = null
+    private var fineSeen = false
 
     private lateinit var windowManager: WindowManager
     private var overlay: FoldOverlayView? = null
@@ -57,9 +59,9 @@ class FoldMotionService : Service(), SensorEventListener {
                 // Paint the arriving screen dark and frosted on its very first frame
                 overlay?.let {
                     it.visibility = View.VISIBLE
-                    it.update(1f, FoldMath.clamp(angle / 180f), 1f)
+                    it.update(1f, FoldMath.clamp(angle / 180f), if (MotionConfig.BRIDGE_THROUGH_BLACK) 1f else 0f)
                 }
-                setWindowAlpha(1f)
+                if (MotionConfig.BRIDGE_THROUGH_BLACK) setWindowAlpha(1f)
                 startTicking()
             }
         }
@@ -91,8 +93,11 @@ class FoldMotionService : Service(), SensorEventListener {
         }
 
         sensorManager = getSystemService(SensorManager::class.java)
+        // Prefer Samsung's continuous sensor; Android's standard one is stepped at 90°
+        fineSensor = sensorManager.getSensorList(Sensor.TYPE_ALL)
+            .firstOrNull { it.stringType == MotionConfig.SAMSUNG_FOLDING_ANGLE }
         hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
-        if (hingeSensor == null) {
+        if (hingeSensor == null && fineSensor == null) {
             stopSelf()
             return
         }
@@ -192,6 +197,9 @@ class FoldMotionService : Service(), SensorEventListener {
         hingeSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
+        fineSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
+        }
     }
 
     private fun stopListening() {
@@ -205,9 +213,16 @@ class FoldMotionService : Service(), SensorEventListener {
     private var tweenFrom = 0f
     private var tweenStart = 0L
     private var lastStepAt = 0L
+    private var tweenMs = MotionConfig.TWEEN_MS
 
     override fun onSensorChanged(event: SensorEvent) {
-        val raw = event.values[0]
+        // Once Samsung's fine sensor has sent anything, ignore the stepped one
+        if (event.sensor == fineSensor) {
+            if (!fineSeen) { fineSeen = true; tweenMs = MotionConfig.TWEEN_FINE_MS }
+        } else if (fineSeen) {
+            return
+        }
+        val raw = FoldMath.clamp(event.values[0], 0f, 180f)
         val now = SystemClock.uptimeMillis()
         if (lastStepAt == 0L) {
             // First reading: jump straight there, no animation on start
@@ -225,11 +240,11 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
 
-    private fun tweenActive(now: Long) = tweenStart != 0L && now - tweenStart < MotionConfig.TWEEN_MS
+    private fun tweenActive(now: Long) = tweenStart != 0L && now - tweenStart < tweenMs
 
     private fun advanceTween(now: Long) {
         if (tweenStart == 0L) { angle = rawAngle; return }
-        val t = FoldMath.clamp((now - tweenStart).toFloat() / MotionConfig.TWEEN_MS)
+        val t = FoldMath.clamp((now - tweenStart).toFloat() / tweenMs)
         angle = tweenFrom + (rawAngle - tweenFrom) * FoldMath.glide(t)
     }
 
@@ -278,7 +293,7 @@ class FoldMotionService : Service(), SensorEventListener {
             FoldMath.clamp(sinceSwitch.toFloat() / (MotionConfig.ARRIVAL_MS * MotionConfig.ARRIVAL_DARK_SHARE))
         )
         // settle stops the screen staying black if the phone is held nearly shut
-        val darkness = maxOf(closingDark * settle, arrivalDark)
+        val darkness = if (!MotionConfig.BRIDGE_THROUGH_BLACK) 0f else maxOf(closingDark * settle, arrivalDark)
 
         // Full opacity is only allowed while dark, when nobody is tapping;
         // otherwise stay under Android's 80% touch-through limit.

@@ -25,6 +25,9 @@ class MainActivity : Activity(), SensorEventListener {
     private lateinit var angleText: TextView
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
+    private var fineSensor: Sensor? = null
+    private var stdValue = "--"
+    private var fineValue = "no data yet"
 
     private val ink = Color.rgb(236, 232, 223)
     private val muted = Color.rgb(154, 151, 166)
@@ -34,6 +37,8 @@ class MainActivity : Activity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         sensorManager = getSystemService(SensorManager::class.java)
         hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
+        fineSensor = sensorManager.getSensorList(Sensor.TYPE_ALL)
+            .firstOrNull { it.stringType == MotionConfig.SAMSUNG_FOLDING_ANGLE }
 
         val pad = (24 * resources.displayMetrics.density).toInt()
         val root = LinearLayout(this).apply {
@@ -51,7 +56,7 @@ class MainActivity : Activity(), SensorEventListener {
 
         angleText = TextView(this).apply {
             text = "Hinge: --"
-            textSize = 48f
+            textSize = 26f
             setTextColor(violet)
             setPadding(0, pad, 0, pad / 2)
         }
@@ -106,6 +111,7 @@ class MainActivity : Activity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         hingeSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+        fineSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             windowManager.addCrossWindowBlurEnabledListener(blurListener)
         }
@@ -153,7 +159,12 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        angleText.text = "Hinge: ${event.values[0].toInt()}°"
+        if (event.sensor == fineSensor) {
+            fineValue = "%.1f°".format(event.values[0])
+        } else {
+            stdValue = "${event.values[0].toInt()}°"
+        }
+        angleText.text = "Samsung fine: $fineValue\nAndroid standard: $stdValue"
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
