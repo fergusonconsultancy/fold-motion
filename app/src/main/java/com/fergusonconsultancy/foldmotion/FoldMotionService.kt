@@ -25,13 +25,19 @@ import android.view.Choreographer
 import android.view.Display
 import android.view.View
 import android.view.WindowManager
-import com.fergusonconsultancy.foldmotion.FoldOverlayView.Shape
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
+/**
+ * Plays Seam Close on the screen being folded away.
+ *
+ * Trigger: Android's hinge sensor, which on the Fold8 Ultra only reports
+ * 0, 90 and 180 degrees. Closing starts when the inner screen sees the hinge
+ * drop; opening starts when the cover sees it rise. The moment One UI switches
+ * panels, the overlay is cleared so the arriving screen is untouched.
+ */
 class FoldMotionService : Service(), SensorEventListener {
 
-    private enum class Phase { IDLE, FILLING, HOLDING, REVEALING, FADING }
+    private enum class Phase { IDLE, PLAYING, HOLDING, FADING }
 
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
@@ -42,17 +48,14 @@ class FoldMotionService : Service(), SensorEventListener {
     private lateinit var params: WindowManager.LayoutParams
     private var display: Display? = null
 
-    private var blurSupported = false
-    private var lastBlurRadius = -1
-
     private var lastAngle = -1f
     private var lastStepAt = 0L
     private var currentInner = false
 
     private var phase = Phase.IDLE
     private var phaseAt = 0L
-    private var fillShape = Shape.FULL
-    private var revealShape = Shape.FULL
+    private var playMs = MotionConfig.EFFECT_MS.toFloat()
+    private var fadeFrom = 1f
     private var ticking = false
 
     private val frameCallback = Choreographer.FrameCallback { onFrame() }
@@ -73,19 +76,12 @@ class FoldMotionService : Service(), SensorEventListener {
             if (inner == currentInner) return
             currentInner = inner
             recordSwitch(inner)
-            // The arriving screen is always clean: effects only play on the
-            // screen being folded away, never on the one you are about to use.
+            // The arriving screen is always clean
             finish()
         }
 
         @Deprecated("Required override")
         override fun onLowMemory() = Unit
-    }
-
-    private val blurListener = java.util.function.Consumer<Boolean> { enabled ->
-        if (!enabled) applyBlur(0)
-        blurSupported = enabled
-        lastBlurRadius = -1
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -114,9 +110,6 @@ class FoldMotionService : Service(), SensorEventListener {
         stopListening()
         runCatching { unregisterReceiver(screenReceiver) }
         Choreographer.getInstance().removeFrameCallback(frameCallback)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && overlay != null) {
-            runCatching { windowManager.removeCrossWindowBlurEnabledListener(blurListener) }
-        }
         windowContext?.let { runCatching { it.unregisterComponentCallbacks(displayCallbacks) } }
         overlay?.let { runCatching { windowManager.removeView(it) } }
         overlay = null
@@ -143,7 +136,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            alpha = MotionConfig.MAX_WINDOW_ALPHA
+            alpha = MotionConfig.IDLE_WINDOW_ALPHA
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             title = "FoldMotionOverlay"
         }
@@ -156,40 +149,22 @@ class FoldMotionService : Service(), SensorEventListener {
             it.visibility = View.GONE
             windowManager.addView(it, params)
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            windowManager.addCrossWindowBlurEnabledListener(blurListener)
-        }
     }
 
     /**
-     * Asks for the panel's top refresh rate while animating. Recordings showed
-     * the cover dropping to about 35fps mid-transition without this.
+     * While an effect is on screen: full opacity so black is truly black, and
+     * the panel's top refresh rate so the sweep is smooth. Both are released
+     * the moment the effect ends.
      */
-    private fun requestHighRefresh(on: Boolean) {
+    private fun setActiveWindow(active: Boolean) {
         val view = overlay ?: return
-        val target = if (on) {
-            display?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 0f
-        } else 0f
-        if (params.preferredRefreshRate == target) return
-        params.preferredRefreshRate = target
+        if (!::params.isInitialized) return
+        val alpha = if (active) 1f else MotionConfig.IDLE_WINDOW_ALPHA
+        val hz = if (active) display?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 0f else 0f
+        if (params.alpha == alpha && params.preferredRefreshRate == hz) return
+        params.alpha = alpha
+        params.preferredRefreshRate = hz
         runCatching { windowManager.updateViewLayout(view, params) }
-    }
-
-    private fun applyBlur(radius: Int) {
-        if (!blurSupported || radius == lastBlurRadius) return
-        val view = overlay ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (radius > 0) {
-                params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-                params.blurBehindRadius = radius
-            } else {
-                params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
-                params.blurBehindRadius = 0
-            }
-            runCatching { windowManager.updateViewLayout(view, params) }
-        }
-        lastBlurRadius = radius
     }
 
     // endregion
@@ -213,23 +188,22 @@ class FoldMotionService : Service(), SensorEventListener {
         lastStepAt = SystemClock.uptimeMillis()
 
         val closing = angle < previous
+        val scale = animScale()
         when {
-            // Folding the inner screen shut: frost spreads from the crease
-            currentInner && closing && phase != Phase.REVEALING -> {
-                if (phase == Phase.IDLE || phase == Phase.FADING) {
-                    fillShape = Shape.FILL_FROM_CREASE
-                    enter(Phase.FILLING)
-                }
+            phase == Phase.IDLE && currentInner && closing -> {
+                playMs = MotionConfig.EFFECT_MS * scale
+                enter(Phase.PLAYING)
             }
-            // Opening from the cover: frost sweeps in from the hinge edge
-            !currentInner && !closing && phase != Phase.REVEALING -> {
-                if (phase == Phase.IDLE || phase == Phase.FADING) {
-                    fillShape = Shape.FILL_FROM_HINGE
-                    enter(Phase.FILLING)
-                }
+            phase == Phase.IDLE && !currentInner && !closing -> {
+                playMs = minOf(MotionConfig.EFFECT_MS * scale, MotionConfig.OPENING_FIT_MS.toFloat())
+                enter(Phase.PLAYING)
             }
-            // Changed your mind mid-fold: let the glass go
-            (phase == Phase.FILLING || phase == Phase.HOLDING) -> enter(Phase.FADING)
+            // Reversed mid-fold: let the panels go
+            (phase == Phase.PLAYING || phase == Phase.HOLDING) &&
+                ((currentInner && !closing) || (!currentInner && closing)) -> {
+                fadeFrom = currentProgress()
+                enter(Phase.FADING)
+            }
         }
     }
 
@@ -237,18 +211,27 @@ class FoldMotionService : Service(), SensorEventListener {
 
     // endregion
 
-    // region Choreography
+    // region Animation
 
     /** Developer options > Animator duration scale. 0 means animations off. */
     private fun animScale(): Float = runCatching {
         Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
     }.getOrDefault(1f)
 
+    private fun elapsed() = (SystemClock.uptimeMillis() - phaseAt).toFloat()
+
+    private fun currentProgress(): Float = when (phase) {
+        Phase.PLAYING -> FoldMath.glide(FoldMath.clamp(elapsed() / playMs))
+        Phase.HOLDING -> 1f
+        else -> 0f
+    }
+
     private fun enter(next: Phase) {
         if (animScale() <= 0f) { finish(); return }
         phase = next
         phaseAt = SystemClock.uptimeMillis()
-        requestHighRefresh(true)
+        overlay?.visibility = View.VISIBLE
+        setActiveWindow(true)
         if (!ticking) {
             ticking = true
             Choreographer.getInstance().postFrameCallback(frameCallback)
@@ -258,51 +241,37 @@ class FoldMotionService : Service(), SensorEventListener {
     private fun onFrame() {
         val view = overlay ?: run { ticking = false; return }
         val scale = animScale().coerceAtLeast(0.01f)
-        val elapsed = (SystemClock.uptimeMillis() - phaseAt).toFloat()
-        fun progress(ms: Long) = FoldMath.clamp(elapsed / (ms * scale))
+        val t = elapsed()
 
-        var glass = 0f
         when (phase) {
             Phase.IDLE -> { finish(); return }
-            Phase.FILLING -> {
-                val t = FoldMath.glide(progress(MotionConfig.FILL_MS))
-                view.show(fillShape, t, 1f, 1f - t)
-                glass = t
-                if (t >= 1f) enter(Phase.HOLDING)
+            Phase.PLAYING -> {
+                val k = FoldMath.clamp(t / playMs)
+                view.show(FoldMath.glide(k))
+                if (k >= 1f) enter(Phase.HOLDING)
             }
             Phase.HOLDING -> {
-                view.show(Shape.FULL, 1f, 1f, 0f)
-                glass = 1f
-                if (elapsed > MotionConfig.HOLD_TIMEOUT_MS * scale) enter(Phase.FADING)
-            }
-            Phase.REVEALING -> {
-                val t = FoldMath.glide(progress(MotionConfig.REVEAL_MS))
-                view.show(revealShape, t, 1f, 1f - t * 0.6f)
-                glass = 1f - t
-                if (t >= 1f) { finish(); return }
+                view.show(1f)
+                if (t > MotionConfig.HOLD_TIMEOUT_MS * scale) { fadeFrom = 1f; enter(Phase.FADING) }
             }
             Phase.FADING -> {
-                val t = FoldMath.glide(progress(MotionConfig.FADE_MS))
-                view.show(Shape.FULL, 1f, 1f - t, 0f)
-                glass = 1f - t
-                if (t >= 1f) { finish(); return }
+                val k = FoldMath.clamp(t / (MotionConfig.FADE_MS * scale))
+                view.show(fadeFrom, 1f - FoldMath.glide(k))
+                if (k >= 1f) { finish(); return }
             }
         }
-
-        if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
-        applyBlur((MotionConfig.PEAK_BLUR_DP * resources.displayMetrics.density * glass).roundToInt())
         Choreographer.getInstance().postFrameCallback(frameCallback)
     }
 
     private fun finish() {
         phase = Phase.IDLE
         ticking = false
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
         overlay?.let {
             it.clearAll()
             it.visibility = View.GONE
         }
-        applyBlur(0)
-        if (::params.isInitialized) requestHighRefresh(false)
+        setActiveWindow(false)
     }
 
     private fun recordSwitch(toInner: Boolean) {
@@ -326,7 +295,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Animating your fold and unfold")
+            .setContentText("Seam Close on fold and unfold")
             .setOngoing(true)
             .build()
 

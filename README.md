@@ -1,6 +1,6 @@
 # Fold Motion
 
-An iPhone Duo style fold transition for the Galaxy Z Fold8 Ultra. The app reads the hinge angle sensor and drives a blur, frost and veil overlay as you open and close the phone.
+A Seam Close fold transition for the Galaxy Z Fold8 Ultra. As you fold or unfold, dark panels close over the screen you are leaving, with light on the closing edges, finishing in black as One UI switches panels. The screen you arrive on is never touched.
 
 ## Get the APK (no Android Studio needed)
 
@@ -15,7 +15,7 @@ An iPhone Duo style fold transition for the Galaxy Z Fold8 Ultra. The app reads 
 2. Tap **Allow display over other apps** and switch it on.
 3. Tap **Start animation**. A silent notification confirms it is running.
 
-If the status says live blur is off, turn off **Reduce transparency and blur** in Accessibility settings. Without it you get frost only.
+Timing follows Developer options > Animator duration scale.
 
 ## Tuning
 

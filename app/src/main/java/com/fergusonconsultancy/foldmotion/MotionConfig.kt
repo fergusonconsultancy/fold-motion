@@ -1,41 +1,35 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * Choreographed fold transition.
+ * Seam Close, both directions. Chosen in Fold Motion Studio on 12 Oct 2026:
+ *   closingEffect "seam", openingEffect "seam", effectMs 550, previewed at 1x
  *
- * The Fold8 Ultra only reports the hinge at 0, 90 and 180 degrees to apps,
- * and Samsung's fine sensor is reserved for its own software. So rather than
- * track the hinge, each hinge step and screen switch triggers a timed,
- * designed animation. All durations follow Developer options >
- * Animator duration scale.
+ * The effect only ever plays on the screen being folded away and finishes in
+ * black before One UI switches panels. The arriving screen is always clean.
+ * Durations follow Developer options > Animator duration scale.
  */
 object MotionConfig {
-    /** Strength of the frosted glass, 0..1 (studio frostPct). */
-    const val FROST = 1.00f
-
-    /** Peak blur behind the glass, in dp, when the phone allows live blur. */
-    const val PEAK_BLUR_DP = 20f
-
-    /** Frost spreading across the screen you are folding away from. */
-    const val FILL_MS = 380L
+    /** Closing: panels close from both outer edges to the crease. */
+    const val EFFECT_MS = 550L
 
     /**
-     * Frost clearing on the screen you arrive on. Shorter than the studio's
-     * 1275ms: One UI already spends 300 to 430ms switching panels, and the
-     * whole thing felt sluggish at full length.
+     * Opening: One UI switches to the inner screen roughly 170 to 300ms after
+     * the hinge reports 90 degrees (measured on this phone, it varies). The
+     * cover sweep is squeezed to finish inside that.
      */
-    const val REVEAL_MS = 750L
+    const val OPENING_FIT_MS = 150L
 
-    /** If no screen switch follows (phone held half open), fade out after this. */
-    const val HOLD_TIMEOUT_MS = 700L
-    const val FADE_MS = 250L
+    /** Stay black this long after the effect if no screen switch follows, then fade out. */
+    const val HOLD_TIMEOUT_MS = 600L
+    const val FADE_MS = 200L
 
     /**
-     * Android 12+ blocks touches through another app's window above 80%
-     * opacity, so the glass never goes beyond this.
+     * Normal window opacity. Android 12+ blocks touches through another app's
+     * window above 80%, so the window only goes fully opaque while an effect
+     * is on screen mid-fold, and always drops back afterwards.
      */
-    const val MAX_WINDOW_ALPHA = 0.8f
+    const val IDLE_WINDOW_ALPHA = 0.8f
 
-    /** Android's standard hinge sensor reports steps; ignore anything smaller. */
+    /** Android's standard hinge sensor reports 90 degree steps; ignore jitter below this. */
     const val MOVE_THRESHOLD_DEG = 1.5f
 }
