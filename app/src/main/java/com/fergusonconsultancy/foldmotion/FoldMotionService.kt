@@ -85,6 +85,9 @@ class FoldMotionService : Service(), SensorEventListener {
         stopListening()
         runCatching { unregisterReceiver(screenReceiver) }
         Choreographer.getInstance().removeFrameCallback(frameCallback)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && overlay != null) {
+            runCatching { windowManager.removeCrossWindowBlurEnabledListener(blurListener) }
+        }
         overlay?.let { runCatching { windowManager.removeView(it) } }
         overlay = null
         super.onDestroy()
@@ -114,13 +117,22 @@ class FoldMotionService : Service(), SensorEventListener {
             title = "FoldMotionOverlay"
         }
 
-        blurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            windowManager.isCrossWindowBlurEnabled
-
         overlay = FoldOverlayView(windowContext).also {
             it.visibility = View.GONE
             windowManager.addView(it, params)
         }
+
+        // Blur can switch on and off while running (battery saver, accessibility),
+        // so follow it live rather than checking once.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            windowManager.addCrossWindowBlurEnabledListener(blurListener)
+        }
+    }
+
+    private val blurListener = java.util.function.Consumer<Boolean> { enabled ->
+        if (!enabled) applyBlur(0)
+        blurSupported = enabled
+        lastBlurRadius = -1
     }
 
     private fun applyBlur(radius: Int) {

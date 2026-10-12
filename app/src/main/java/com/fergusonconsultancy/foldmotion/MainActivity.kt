@@ -102,11 +102,19 @@ class MainActivity : Activity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         hingeSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            windowManager.addCrossWindowBlurEnabledListener(blurListener)
+        }
         refresh()
     }
 
+    private val blurListener = java.util.function.Consumer<Boolean> { refresh() }
+
     override fun onPause() {
         sensorManager.unregisterListener(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            windowManager.removeCrossWindowBlurEnabledListener(blurListener)
+        }
         super.onPause()
     }
 
@@ -118,7 +126,9 @@ class MainActivity : Activity(), SensorEventListener {
             appendLine(if (overlayOk) "Display over other apps: allowed" else "Display over other apps: tap the first button")
             appendLine(
                 if (blurOk) "Live blur: supported"
-                else "Live blur: off (check Settings > Accessibility > Visibility enhancements > Reduce transparency and blur). Frost only."
+                else "Live blur: off. Frost only until it turns on.\n" +
+                    "Check: Power saving off, Reduce transparency and blur off, " +
+                    "and Developer options > Allow window-level blurs on."
             )
         }
     }
