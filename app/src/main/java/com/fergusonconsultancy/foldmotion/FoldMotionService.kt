@@ -73,13 +73,9 @@ class FoldMotionService : Service(), SensorEventListener {
             if (inner == currentInner) return
             currentInner = inner
             recordSwitch(inner)
-            // Arriving screen: fully frosted on its first frame, then clears
-            revealShape = if (inner) Shape.REVEAL_FROM_CREASE else Shape.REVEAL_FROM_HINGE
-            enter(Phase.REVEALING)
-            overlay?.let {
-                it.visibility = View.VISIBLE
-                it.show(Shape.FULL, 0f, 1f, 0f)
-            }
+            // The arriving screen is always clean: effects only play on the
+            // screen being folded away, never on the one you are about to use.
+            finish()
         }
 
         @Deprecated("Required override")

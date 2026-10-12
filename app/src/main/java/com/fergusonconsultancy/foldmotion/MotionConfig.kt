@@ -27,8 +27,8 @@ object MotionConfig {
     const val REVEAL_MS = 750L
 
     /** If no screen switch follows (phone held half open), fade out after this. */
-    const val HOLD_TIMEOUT_MS = 1500L
-    const val FADE_MS = 450L
+    const val HOLD_TIMEOUT_MS = 700L
+    const val FADE_MS = 250L
 
     /**
      * Android 12+ blocks touches through another app's window above 80%
