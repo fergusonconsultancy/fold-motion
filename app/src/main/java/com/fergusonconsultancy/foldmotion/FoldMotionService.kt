@@ -30,7 +30,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Plays Louvre Signature in Visconti green on the inner screen as the phone closes,
+ * Plays De Stijl Rules in Visconti green on the inner screen as the phone closes,
  * with haptic ticks timed to the light. Opening is left clean.
  *
  * Trigger: Android's hinge sensor, which on the Fold8 Ultra only reports
@@ -478,7 +478,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Louvre Signature when closing")
+            .setContentText("De Stijl Rules when closing")
             .setOngoing(true)
             .build()
 

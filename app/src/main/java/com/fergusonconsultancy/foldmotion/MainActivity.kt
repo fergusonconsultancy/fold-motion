@@ -184,7 +184,7 @@ class MainActivity : Activity(), SensorEventListener {
             )
             val topHz = display?.supportedModes?.maxOfOrNull { it.refreshRate }?.toInt()
             appendLine("Animates at up to ${topHz ?: "?"}Hz")
-            appendLine("Effect: Louvre Signature in Visconti green when closing. Opening is left clean.")
+            appendLine("Effect: De Stijl Rules in Visconti green when closing. Opening is left clean.")
             appendLine(
                 if (AutoStart.isEnabled(this@MainActivity)) "Starts automatically after a restart: on"
                 else "Starts automatically after a restart: off (tap Start animation)"

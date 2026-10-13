@@ -1,9 +1,9 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * Louvre Signature in Visconti green, closing only. Chosen in Fold Motion
- * Studio on 13 Oct 2026:
- *   closingEffect "louvre2", finish "visconti", effectMs 900, previewed at 1x
+ * De Stijl Rules in Visconti green, closing only. Chosen in Fold Motion
+ * Studio on 13 Oct 2026, replacing Louvre Signature:
+ *   closingEffect "destijl", finish "visconti", effectMs 900, previewed at 1x
  *
  * Opening is deliberately left clean: One UI hands over to the inner screen
  * 63 to 297ms after the hinge reports 90 degrees (measured on this phone),
@@ -16,20 +16,15 @@ object MotionConfig {
     /** Effect length before Animator duration scale. */
     const val EFFECT_MS = 900L
 
-    /** Blades across the inner screen. */
-    const val BLADES = 10
-
-    /** Stage timings, as shares of eased progress (0 to 1). */
-    const val BLADES_START = 0.04f
-    const val BLADES_END = 0.74f
-    const val BLADE_TURN = 0.30f
-    const val PULSE_START = 0.72f
-    const val PULSE_LENGTH = 0.18f
+    /** Stage timings, as shares of eased progress (0 to 1). Rules draw from 0. */
+    const val CELLS_START = 0.28f
+    const val CELLS_END = 0.82f
+    const val CELL_FILL = 0.14f
     const val DUSK_START = 0.80f
 
-    /** Haptic moments: a soft tick as the wave starts, a crisp click on the light pulse. */
-    const val TICK_AT = BLADES_START
-    const val CLICK_AT = PULSE_START
+    /** Haptic moments: a soft tick as the first rule starts to draw, a crisp click as the last cell lands. */
+    const val TICK_AT = 0.03f
+    const val CLICK_AT = CELLS_END
 
     /** Stay black this long after the effect if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L

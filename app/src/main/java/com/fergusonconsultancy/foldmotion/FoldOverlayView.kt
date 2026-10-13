@@ -1,8 +1,6 @@
 package com.fergusonconsultancy.foldmotion
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -10,31 +8,22 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Shader
 import android.view.View
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.exp
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
- * Louvre Signature in Visconti green, drawn over the inner screen as it closes.
+ * De Stijl Rules in Visconti green, drawn over the inner screen as it closes.
  *
- * 1. Anticipation: the screen dims a touch and a glint wakes at the leading edge.
- * 2. Blades turn from edge-on to face-on in an overlapping wave. Each flashes
- *    metallic green with sparkling flake as it catches the light, casts a
- *    shadow ahead of it, and springs slightly past shut.
- * 3. Payoff: a pulse of warm light runs back along the seams.
- * 4. Dusk: a green-to-black gradient rolls in, so the screen is already black
+ * 1. Rules: black bars draw a grid across the screen. Verticals drop from the
+ *    top, horizontals draw in from the leading edge. The crease is one of the
+ *    verticals and carries a soft light, because the hinge is the structural
+ *    line of the device.
+ * 2. Cells: the grid's cells fill in sequence from the leading edge. Most go
+ *    black; two go Visconti green and one champagne.
+ * 3. Dusk: a green-to-black gradient rolls in, so the screen is already black
  *    when One UI switches the panel off.
  *
- * Zero allocation per frame: every gradient is built once, across a unit
- * width, and repositioned each frame with a shared matrix. The blade's colour
- * shift is done by laying a lit gradient over an unlit one at the lit amount,
- * which composites to exactly the same colour as mixing them. This keeps the
- * garbage collector out of the animation, the usual cause of a dropped frame.
+ * Zero allocation per frame: every gradient is built once and positioned with
+ * a shared matrix; the grid geometry is computed once per screen size.
  *
  * Ported from the Fold Motion Studio preview so the phone matches what was approved.
  */
@@ -46,50 +35,59 @@ class FoldOverlayView(context: Context) : View(context) {
     /** Frames this view actually drew since the last reset; compared against frames requested. */
     var drawCount = 0
 
-    private val density = resources.displayMetrics.density
     private val m = Matrix()
 
-    // Visconti green (approximation; no official colour value was available)
-    private val bladeEnd = Color.rgb(2, 8, 5)
+    // Grid, as fractions of the screen. The crease (0.5) is one of the vertical rules.
+    private val vRules = floatArrayOf(0.2f, 0.5f, 0.71f, 0.88f)
+    private val hRules = floatArrayOf(0.23f, 0.49f, 0.76f)
+    private val crease = 1
+    private val cols = vRules.size + 1
+    private val rows = hRules.size + 1
 
-    // Gradients across a unit width (0 to 1), placed per draw with setLocalMatrix
-    private val shadowShader = unitGradient(intArrayOf(Color.TRANSPARENT, Color.BLACK), null)
-    private val unlitShader = unitGradient(
-        intArrayOf(Color.rgb(3, 14, 9), Color.rgb(12, 46, 30), Color.rgb(12, 46, 30), bladeEnd),
-        floatArrayOf(0f, 0.35f, 0.55f, 1f)
+    // Cell edges in pixels, filled in onSizeChanged
+    private val xs = FloatArray(cols + 1)
+    private val ys = FloatArray(rows + 1)
+
+    // Fill order: from the leading edge (last column) inwards, then top to bottom
+    private val order = IntArray(cols * rows).also { o ->
+        var k = 0
+        for (c in cols - 1 downTo 0) for (r in 0 until rows) o[k++] = c * rows + r
+    }
+
+    // Accent cells (column, row) and their unit-height vertical gradients
+    private val accentCell = IntArray(cols * rows) { -1 }
+    private val accentShaders = arrayOf(
+        unitVertical(Color.rgb(44, 98, 66), Color.rgb(12, 46, 30)),      // Visconti green
+        unitVertical(Color.rgb(34, 82, 56), Color.rgb(10, 40, 26)),      // Visconti green, deeper
+        unitVertical(Color.rgb(228, 216, 190), Color.rgb(196, 182, 152)) // champagne
     )
-    private val litShader = unitGradient(
-        intArrayOf(Color.rgb(56, 106, 70), Color.rgb(180, 220, 170), Color.rgb(180, 220, 170), bladeEnd),
-        floatArrayOf(0f, 0.35f, 0.55f, 1f)
-    )
-    private val bandShader = unitGradient(
+    init {
+        accentCell[3 * rows + 1] = 0
+        accentCell[1 * rows + 2] = 1
+        accentCell[0 * rows + 0] = 2
+    }
+
+    private val bandShader = LinearGradient(
+        0f, 0f, 1f, 0f,
         intArrayOf(Color.argb(0, 255, 255, 255), Color.WHITE, Color.argb(0, 255, 255, 255)),
-        floatArrayOf(0f, 0.5f, 1f)
+        floatArrayOf(0f, 0.5f, 1f),
+        Shader.TileMode.CLAMP
     )
-    private val duskShader = unitGradient(
+    private val duskShader = LinearGradient(
+        0f, 0f, 1f, 0f,
         intArrayOf(Color.TRANSPARENT, Color.argb(204, 2, 13, 8), Color.BLACK),
-        floatArrayOf(0f, 0.5f, 1f)
-    )
-    // Vertical sheen across a unit height; scaled to the view height in onSizeChanged
-    private val sheenShader = LinearGradient(
-        0f, 0f, 0f, 1f,
-        intArrayOf(Color.argb(64, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(20, 255, 255, 255)),
         floatArrayOf(0f, 0.5f, 1f),
         Shader.TileMode.CLAMP
     )
 
-    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = shadowShader }
-    private val unlitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = unlitShader }
-    private val litPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = litShader }
+    private val cellPaint = Paint().apply { color = Color.rgb(3, 5, 4) }
+    private val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rulePaint = Paint().apply { color = Color.BLACK }
+    private val edgePaint = Paint().apply { color = Color.argb(89, 233, 223, 200) }
     private val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = bandShader }
     private val duskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = duskShader }
-    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = sheenShader }
-    private val flakePaint = Paint().apply {
-        shader = BitmapShader(makeGrain(), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-    }
-    private val solid = Paint()
 
-    private val flakeStrength = 0.6f
+    private var ruleW = 4f
 
     fun show(progress: Float, alpha: Float = 1f) {
         p = FoldMath.clamp(progress)
@@ -104,8 +102,13 @@ class FoldOverlayView(context: Context) : View(context) {
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        m.setScale(1f, h.toFloat())
-        sheenShader.setLocalMatrix(m)
+        xs[0] = 0f
+        for (i in vRules.indices) xs[i + 1] = vRules[i] * w
+        xs[cols] = w.toFloat()
+        ys[0] = 0f
+        for (j in hRules.indices) ys[j + 1] = hRules[j] * h
+        ys[rows] = h.toFloat()
+        ruleW = max(4f, w * 0.014f)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -115,99 +118,78 @@ class FoldOverlayView(context: Context) : View(context) {
         val h = height.toFloat()
         val layer = if (alphaAll < 1f) canvas.saveLayerAlpha(0f, 0f, w, h, (255 * alphaAll).toInt()) else -1
 
-        // The effect is drawn right to left; mirror it so the wave runs left to right
+        // Drawn right to left; mirrored so the composition builds left to right
         val flip = canvas.save()
         if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
 
-        // 1. Anticipation
-        solid.color = Color.argb((255 * 0.2f * sm(p / 0.3f)).toInt(), 0, 0, 0)
-        canvas.drawRect(0f, 0f, w, h, solid)
-        val pre = sm(p / 0.05f) * (1f - sm((p - 0.08f) / 0.08f))
-        band(canvas, w - w * 0.012f, w * 0.05f, 0.5f * pre, h)
-
-        // 2. Blades
-        val n = MotionConfig.BLADES
-        val col = w / n
-        val a0 = MotionConfig.BLADES_START
-        val turnLen = MotionConfig.BLADE_TURN
-        val stagger = (MotionConfig.BLADES_END - a0 - turnLen) / (n - 1)
-        val edgeW = 0.75f * density
-
-        for (i in 0 until n) {
-            val q = FoldMath.clamp((p - a0 - i * stagger) / turnLen)
+        // Cells fill in sequence from the leading edge
+        val n = order.size
+        val dur = MotionConfig.CELL_FILL
+        val stagger = (MotionConfig.CELLS_END - MotionConfig.CELLS_START - dur) / (n - 1)
+        for (ord in 0 until n) {
+            val q = FoldMath.glide(FoldMath.clamp((p - MotionConfig.CELLS_START - ord * stagger) / dur))
             if (q <= 0f) continue
-            val idx = n - 1 - i
-            val th = easeOutBack(q) * (PI.toFloat() / 2f)
-            val s = abs(sin(th))
-            val bw = (col + 1f) * s
-            val left = idx * col + col / 2f - bw / 2f
-            val right = left + bw
-
-            // Shadow cast onto the screen ahead of the blade
-            if (q < 1f) {
-                val shw = col * 0.5f * (1f - s) + col * 0.1f
-                val sa = 0.4f * min(1f, q * 3f) * (1f - s * 0.6f)
-                place(shadowShader, left - shw, shw)
-                shadowPaint.alpha = (255 * sa).toInt()
-                canvas.drawRect(left - shw, 0f, left, h, shadowPaint)
-            }
-
-            if (bw < 0.5f) continue
-
-            // Blade face: unlit base, with the lit gradient laid over at the lit amount
-            val deg = th * 180f / PI.toFloat()
-            val lit = 0.9f * exp(-((deg - 60f) / 16f).pow(2))
-            place(unlitShader, left, bw)
-            canvas.drawRect(left, 0f, right, h, unlitPaint)
-            if (lit > 0.004f) {
-                place(litShader, left, bw)
-                litPaint.alpha = (255 * lit).toInt()
-                canvas.drawRect(left, 0f, right, h, litPaint)
-            }
-
-            // Metallic flake sparkling as the blade catches the light
-            if (lit > 0.05f) {
-                flakePaint.alpha = (255 * flakeStrength * lit).toInt()
-                canvas.drawRect(left, 0f, right, h, flakePaint)
-            }
-
-            // Vertical sheen so the flash reads as metal
-            if (lit > 0.02f) {
-                sheenPaint.alpha = (255 * lit).toInt()
-                canvas.drawRect(left, 0f, right, h, sheenPaint)
-            }
-
-            // Crisp leading edge
-            if (q < 1f) {
-                solid.color = Color.argb((255 * 0.75f * (1f - q)).toInt(), 233, 223, 200)
-                canvas.drawRect(left, 0f, left + edgeW, h, solid)
+            val cell = order[ord]
+            val c = cell / rows
+            val r = cell % rows
+            val x0 = xs[c]; val x1 = xs[c + 1]; val y0 = ys[r]; val y1 = ys[r + 1]
+            val left = x1 - (x1 - x0) * q
+            val accent = accentCell[cell]
+            if (accent >= 0) {
+                val shader = accentShaders[accent]
+                m.setScale(1f, y1 - y0)
+                m.postTranslate(0f, y0)
+                shader.setLocalMatrix(m)
+                accentPaint.shader = shader
+                canvas.drawRect(left, y0, x1, y1, accentPaint)
+            } else {
+                canvas.drawRect(left, y0, x1, y1, cellPaint)
             }
         }
 
-        // 3. Payoff: a pulse of light runs back along the seams
-        val f = FoldMath.clamp((p - MotionConfig.PULSE_START) / MotionConfig.PULSE_LENGTH)
-        if (f > 0f && f < 1f) {
-            val pos = -0.1f + f * 1.2f
-            val half = density / 2f
-            for (k in 1 until n) {
-                val sx = k * col
-                val d = sx / w - pos
-                val b = exp(-(d * d) / (2f * 0.05f * 0.05f))
-                if (b > 0.01f) {
-                    solid.color = Color.argb((255 * 0.9f * b).toInt(), 255, 246, 230)
-                    canvas.drawRect(sx - half, 0f, sx + half, h, solid)
-                    band(canvas, sx, w * 0.03f, 0.35f * b, h)
+        // Vertical rules drop from the top, the leading one first
+        val half = ruleW / 2f
+        for (i in vRules.indices) {
+            val q = FoldMath.glide(FoldMath.clamp((p - (vRules.size - 1 - i) * 0.05f) / 0.18f))
+            if (q <= 0f) continue
+            val x = xs[i + 1]
+            val bottom = h * q
+            canvas.drawRect(x - half, 0f, x + half, bottom, rulePaint)
+            canvas.drawRect(x + half, 0f, x + half + 1f, bottom, edgePaint)
+            if (i == crease) {
+                // The hinge carries a soft light while the grid forms
+                val strength = 0.35f * q * (1f - FoldMath.clamp((p - 0.6f) / 0.2f))
+                val peak = (255 * strength).toInt()
+                if (peak > 0) {
+                    val hw = w * 0.02f
+                    m.setScale(hw * 2f, 1f)
+                    m.postTranslate(x - hw, 0f)
+                    bandShader.setLocalMatrix(m)
+                    bandPaint.alpha = peak
+                    canvas.drawRect(x - hw, 0f, x + hw, bottom, bandPaint)
                 }
             }
         }
 
-        // 4. Dusk: green-to-black gradient rolling in
+        // Horizontal rules draw in from the leading edge
+        for (j in hRules.indices) {
+            val q = FoldMath.glide(FoldMath.clamp((p - 0.08f - j * 0.05f) / 0.2f))
+            if (q <= 0f) continue
+            val y = ys[j + 1]
+            val start = w - w * q
+            canvas.drawRect(start, y - half, w, y + half, rulePaint)
+            canvas.drawRect(start, y + half, w, y + half + 1f, edgePaint)
+        }
+
+        // Dusk: green-to-black gradient rolling in
         val dk = FoldMath.clamp((p - MotionConfig.DUSK_START) / (1f - MotionConfig.DUSK_START))
         if (dk > 0f) {
             val e = FoldMath.glide(dk)
             val feather = w * 0.75f
             val front = w - e * (w + feather)
-            place(duskShader, front, feather)
+            m.setScale(feather, 1f)
+            m.postTranslate(front, 0f)
+            duskShader.setLocalMatrix(m)
             canvas.drawRect(max(0f, front), 0f, w + 1f, h, duskPaint)
         }
 
@@ -215,43 +197,6 @@ class FoldOverlayView(context: Context) : View(context) {
         if (layer >= 0) canvas.restoreToCount(layer)
     }
 
-    /** Positions a unit-width gradient to span [x, x + width]. */
-    private fun place(shader: Shader, x: Float, width: Float) {
-        m.setScale(max(width, 0.001f), 1f)
-        m.postTranslate(x, 0f)
-        shader.setLocalMatrix(m)
-    }
-
-    private fun band(canvas: Canvas, x: Float, halfWidth: Float, strength: Float, h: Float) {
-        val peak = (255 * FoldMath.clamp(strength)).toInt()
-        if (peak <= 0) return
-        place(bandShader, x - halfWidth, halfWidth * 2f)
-        bandPaint.alpha = peak
-        canvas.drawRect(x - halfWidth, 0f, x + halfWidth, h, bandPaint)
-    }
-
-    /** Clamped smoothstep, matching the Studio's smooth(). */
-    private fun sm(t: Float): Float = FoldMath.smooth(FoldMath.clamp(t))
-
-    private fun easeOutBack(t: Float): Float {
-        val c1 = 1.7f
-        val c3 = c1 + 1f
-        return 1f + c3 * (t - 1f).pow(3) + c1 * (t - 1f).pow(2)
-    }
-
-    private fun unitGradient(colors: IntArray, stops: FloatArray?) =
-        LinearGradient(0f, 0f, 1f, 0f, colors, stops, Shader.TileMode.CLAMP)
-
-    /** 96x96 tile of faint white specks, the same recipe as the Studio preview. */
-    private fun makeGrain(): Bitmap {
-        val size = 96
-        val pixels = IntArray(size * size)
-        var seed = 11L
-        for (i in pixels.indices) {
-            seed = (seed * 16807L) % 2147483647L
-            val v = seed / 2147483647f
-            pixels[i] = Color.argb((v * v * 60f).roundToInt(), 255, 255, 255)
-        }
-        return Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
-    }
+    private fun unitVertical(top: Int, bottom: Int) =
+        LinearGradient(0f, 0f, 0f, 1f, top, bottom, Shader.TileMode.CLAMP)
 }
