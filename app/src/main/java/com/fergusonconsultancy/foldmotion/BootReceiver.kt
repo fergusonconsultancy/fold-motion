@@ -19,6 +19,7 @@ class BootReceiver : BroadcastReceiver() {
             else -> return
         }
         if (!AutoStart.isEnabled(context)) return
+        HealJob.schedule(context)
         if (!Settings.canDrawOverlays(context)) return
         runCatching {
             context.startForegroundService(Intent(context, FoldMotionService::class.java))

@@ -8,8 +8,9 @@ import android.os.Vibrator
 import android.os.VibratorManager
 
 /**
- * Two haptic moments timed to the light: a soft tick as the blades start,
- * and a crisp click on the payoff pulse. Uses the phone's haptic primitives
+ * Haptic moments: on closing, a soft tick as the blades start and a crisp
+ * click on the payoff pulse; on opening, a low settle as the inner screen
+ * arrives. Uses the phone's haptic primitives
  * where supported, so it follows the system vibration intensity settings.
  */
 class Haptics(private val context: Context) {
@@ -29,6 +30,23 @@ class Haptics(private val context: Context) {
             VibrationEffect.Composition.PRIMITIVE_CLICK
         ) == true
     }.getOrDefault(false)
+
+    /** LOW_TICK is a deeper, softer primitive added in Android 12. */
+    private val lowTick: Boolean = runCatching {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            vibrator?.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_LOW_TICK) == true
+    }.getOrDefault(false)
+
+    /** Opening: a soft, low settle as the inner screen arrives, bookending the closing tick and click. */
+    fun settle() = play(
+        when {
+            lowTick && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> VibrationEffect.startComposition()
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_LOW_TICK, 0.7f).compose()
+            primitives -> VibrationEffect.startComposition()
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 0.35f).compose()
+            else -> VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+        }
+    )
 
     val enabled: Boolean
         get() = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, true)

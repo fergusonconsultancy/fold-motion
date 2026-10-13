@@ -19,6 +19,7 @@ import android.hardware.SensorManager
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.Choreographer
@@ -26,6 +27,7 @@ import android.view.Display
 import android.view.View
 import android.view.WindowManager
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Plays Louvre Signature in Visconti green on the inner screen as the phone closes,
@@ -68,7 +70,14 @@ class FoldMotionService : Service(), SensorEventListener {
     private var tickDone = false
     private var clickDone = false
 
-    private val frameCallback = Choreographer.FrameCallback { onFrame() }
+    /** When the current close's effect started, for learning the switch timing. */
+    private var playStartAt = 0L
+    private val stats = FrameStats()
+
+    /** Screen state as last reported by One UI's switch notifications; used only to detect switches. */
+    private var notifiedInner = false
+
+    private val frameCallback = Choreographer.FrameCallback { t -> onFrame(t) }
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -83,8 +92,25 @@ class FoldMotionService : Service(), SensorEventListener {
     private val displayCallbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(config: Configuration) {
             val inner = FoldMath.isInnerShape(config.screenWidthDp.toFloat(), config.screenHeightDp.toFloat())
-            if (inner == currentInner) return
+            if (inner == notifiedInner) return
+            notifiedInner = inner
             currentInner = inner
+            val now = SystemClock.uptimeMillis()
+
+            if (!inner) {
+                // Closed: learn from this close, and record how the run went
+                if (playStartAt != 0L && (phase == Phase.PLAYING || phase == Phase.HOLDING)) {
+                    Timing.record(this@FoldMotionService, now - playStartAt)
+                    if (phase == Phase.PLAYING) {
+                        saveRun((elapsed() / playMs * 100f).roundToInt().coerceIn(0, 99))
+                    }
+                }
+            } else if (isInteractive()) {
+                // Opened: a low settle as the inner screen arrives
+                haptics.settle()
+            }
+
+            playStartAt = 0L
             recordSwitch(inner)
             // The arriving screen is always clean
             finish()
@@ -101,6 +127,7 @@ class FoldMotionService : Service(), SensorEventListener {
         startAsForeground()
         running = true
         Status.mark(this, Status.STARTED)
+        HealJob.schedule(this)
 
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return }
 
@@ -167,6 +194,7 @@ class FoldMotionService : Service(), SensorEventListener {
 
         val config = ctx.resources.configuration
         currentInner = FoldMath.isInnerShape(config.screenWidthDp.toFloat(), config.screenHeightDp.toFloat())
+        notifiedInner = currentInner
         ctx.registerComponentCallbacks(displayCallbacks)
 
         overlay = FoldOverlayView(ctx).also {
@@ -225,7 +253,10 @@ class FoldMotionService : Service(), SensorEventListener {
         when {
             // Closing the inner screen: the only direction with an effect
             phase == Phase.IDLE && innerNow && closing -> {
-                playMs = MotionConfig.EFFECT_MS * scale
+                // Fitted to this owner's closing speed once enough closes are learned
+                playMs = Timing.fittedMs(this, MotionConfig.EFFECT_MS * scale)
+                playStartAt = now
+                stats.reset()
                 tickDone = false
                 clickDone = false
                 Status.mark(this, Status.PLAYED)
@@ -270,7 +301,14 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
 
-    private fun onFrame() {
+    private fun saveRun(completedPercent: Int) {
+        stats.result()?.let { Status.saveRun(this, it, playMs.roundToInt(), completedPercent) }
+    }
+
+    private fun isInteractive(): Boolean =
+        getSystemService(PowerManager::class.java)?.isInteractive == true
+
+    private fun onFrame(frameTimeNanos: Long) {
         val view = overlay ?: run { ticking = false; return }
         val scale = animScale().coerceAtLeast(0.01f)
         val t = elapsed()
@@ -281,10 +319,14 @@ class FoldMotionService : Service(), SensorEventListener {
                 val k = FoldMath.clamp(t / playMs)
                 val p = FoldMath.glide(k)
                 view.show(p)
+                stats.onFrame(frameTimeNanos)
                 // Haptics timed to the light: tick as the blades start, click on the pulse
                 if (!tickDone && p >= MotionConfig.TICK_AT) { tickDone = true; haptics.tick() }
                 if (!clickDone && p >= MotionConfig.CLICK_AT) { clickDone = true; haptics.click() }
-                if (k >= 1f) enter(Phase.HOLDING)
+                if (k >= 1f) {
+                    saveRun(100)
+                    enter(Phase.HOLDING)
+                }
             }
             Phase.HOLDING -> {
                 // Blades shut and black until One UI switches to the cover

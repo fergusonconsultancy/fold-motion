@@ -72,10 +72,12 @@ class MainActivity : Activity(), SensorEventListener {
         root.addView(button("Start animation") {
             AutoStart.setEnabled(this, true)
             startForegroundService(Intent(this, FoldMotionService::class.java))
+            HealJob.schedule(this)
             refresh()
         })
         root.addView(button("Stop animation") {
             AutoStart.setEnabled(this, false)
+            HealJob.cancel(this)
             stopService(Intent(this, FoldMotionService::class.java))
             refresh()
         })
@@ -175,6 +177,10 @@ class MainActivity : Activity(), SensorEventListener {
             appendLine(if (FoldMotionService.running) "Service: running" else "Service: NOT running")
             appendLine("Service last started: ${Status.describe(this@MainActivity, Status.STARTED)}")
             appendLine("Effect last played: ${Status.describe(this@MainActivity, Status.PLAYED)}")
+            appendLine(Status.describeHeals(this@MainActivity))
+            appendLine()
+            appendLine(Timing.describe(this@MainActivity, MotionConfig.EFFECT_MS * maxOf(scale, 0.01f)))
+            appendLine(Status.describeRun(this@MainActivity))
         }
     }
 

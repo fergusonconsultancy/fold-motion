@@ -31,6 +31,11 @@
                 android:value="Fold transition overlay driven by the hinge angle sensor" />
         </service>
 
+        <service
+            android:name=".HealJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true">
