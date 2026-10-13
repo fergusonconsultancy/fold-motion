@@ -1,6 +1,6 @@
 # Fold Motion
 
-A Lumen Line fold transition for the Galaxy Z Fold8 Ultra. As you fold or unfold, a blade of light with a soft bloom sweeps right to left across the screen you are leaving, leaving dark smoked glass behind it, with the violet afterglow caught in the surface, until One UI switches panels. The screen you arrive on is never touched.
+A Louvre fold transition for the Galaxy Z Fold8 Ultra. As you close the phone, vertical blades snap shut across the inner screen one after another from right to left, each with a lit edge, settling to black as One UI switches to the cover. Opening is left clean, and the cover always arrives untouched. Starts automatically after a restart or app update once switched on.
 
 ## Get the APK (no Android Studio needed)
 

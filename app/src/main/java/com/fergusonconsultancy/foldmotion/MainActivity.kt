@@ -70,10 +70,12 @@ class MainActivity : Activity(), SensorEventListener {
             )
         })
         root.addView(button("Start animation") {
+            AutoStart.setEnabled(this, true)
             startForegroundService(Intent(this, FoldMotionService::class.java))
             refresh()
         })
         root.addView(button("Stop animation") {
+            AutoStart.setEnabled(this, false)
             stopService(Intent(this, FoldMotionService::class.java))
             refresh()
         })
@@ -137,7 +139,11 @@ class MainActivity : Activity(), SensorEventListener {
             )
             val topHz = display?.supportedModes?.maxOfOrNull { it.refreshRate }?.toInt()
             appendLine("Animates at up to ${topHz ?: "?"}Hz")
-            appendLine("Effect: Lumen Line with smoked glass, closing and opening")
+            appendLine("Effect: Louvre when closing. Opening is left clean.")
+            appendLine(
+                if (AutoStart.isEnabled(this@MainActivity)) "Starts automatically after a restart: on"
+                else "Starts automatically after a restart: off (tap Start animation)"
+            )
         }
     }
 
