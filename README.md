@@ -1,6 +1,6 @@
 # Fold Motion
 
-A right-to-left fold transition for the Galaxy Z Fold8 Ultra. Closing plays Roll: a glossy cylinder rolls across the inner screen laying a dark sheet behind it. Opening plays Slide: a tinted sheet glides across the cover. Both finish as One UI switches panels, and the screen you arrive on is never touched.
+A Lumen Line fold transition for the Galaxy Z Fold8 Ultra. As you fold or unfold, a blade of light with a soft bloom sweeps right to left across the screen you are leaving, its violet afterglow cooling to black as One UI switches panels. The screen you arrive on is never touched.
 
 ## Get the APK (no Android Studio needed)
 

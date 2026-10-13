@@ -1,40 +1,32 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * Chosen in Fold Motion Studio on 12 Oct 2026:
- *   closingEffect "roll", openingEffect "slide", effectMs 600, previewed at 1x
+ * Lumen Line, both directions. Chosen in Fold Motion Studio on 13 Oct 2026:
+ *   closingEffect "lumen", openingEffect "lumen", effectMs 725, previewed at 1x
  *
- * Both travel right to left. Effects only ever play on the screen being
- * folded away and finish dark before One UI switches panels. The arriving
- * screen is always clean. Durations follow Developer options > Animator
- * duration scale.
+ * A blade of light sweeps right to left with a soft bloom, leaving a violet
+ * afterglow that cools to black. It only ever plays on the screen being
+ * folded away and the arriving screen is always clean. Durations follow
+ * Developer options > Animator duration scale.
  */
 object MotionConfig {
-    enum class Effect { ROLL, SLIDE }
-
-    /** Inner screen folding shut. */
-    val CLOSING_EFFECT = Effect.ROLL
-
-    /** Cover screen as you open the phone. */
-    val OPENING_EFFECT = Effect.SLIDE
-
-    /** Effect length before Animator duration scale. */
-    const val EFFECT_MS = 600L
+    /** Closing sweep length before Animator duration scale. */
+    const val EFFECT_MS = 725L
 
     /**
-     * One UI switches to the inner screen roughly 170 to 300ms after the hinge
-     * reports 90 degrees when opening (measured on this phone, it varies). The
-     * opening effect is squeezed to finish inside that.
+     * One UI switches to the inner screen 63 to 297ms after the hinge reports
+     * 90 degrees when opening (measured on this phone, it varies). The cover
+     * sweep is squeezed to fit the shortest measured window.
      */
-    const val OPENING_FIT_MS = 150L
+    const val OPENING_FIT_MS = 60L
 
-    /** Stay covered this long after the effect if no screen switch follows, then fade out. */
+    /** Stay dark this long after the sweep if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L
     const val FADE_MS = 200L
 
     /**
      * Normal window opacity. Android 12+ blocks touches through another app's
-     * window above 80%, so the window only goes fully opaque while an effect
+     * window above 80%, so the window only goes fully opaque while the sweep
      * is on screen mid-fold, and always drops back afterwards.
      */
     const val IDLE_WINDOW_ALPHA = 0.8f

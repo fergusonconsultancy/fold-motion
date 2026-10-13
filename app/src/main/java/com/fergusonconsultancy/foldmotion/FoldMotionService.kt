@@ -28,7 +28,7 @@ import android.view.WindowManager
 import kotlin.math.abs
 
 /**
- * Plays Roll (closing) or Slide (opening) on the screen being folded away.
+ * Plays Lumen Line on the screen being folded away, in both directions.
  *
  * Trigger: Android's hinge sensor, which on the Fold8 Ultra only reports
  * 0, 90 and 180 degrees. Closing starts when the inner screen sees the hinge
@@ -191,12 +191,10 @@ class FoldMotionService : Service(), SensorEventListener {
         val scale = animScale()
         when {
             phase == Phase.IDLE && currentInner && closing -> {
-                overlay?.effect = MotionConfig.CLOSING_EFFECT
                 playMs = MotionConfig.EFFECT_MS * scale
                 enter(Phase.PLAYING)
             }
             phase == Phase.IDLE && !currentInner && !closing -> {
-                overlay?.effect = MotionConfig.OPENING_EFFECT
                 playMs = minOf(MotionConfig.EFFECT_MS * scale, MotionConfig.OPENING_FIT_MS.toFloat())
                 enter(Phase.PLAYING)
             }
@@ -297,7 +295,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Roll on closing, Slide on opening")
+            .setContentText("Lumen Line on fold and unfold")
             .setOngoing(true)
             .build()
 

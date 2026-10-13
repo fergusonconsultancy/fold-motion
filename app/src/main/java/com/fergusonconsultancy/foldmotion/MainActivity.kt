@@ -137,7 +137,7 @@ class MainActivity : Activity(), SensorEventListener {
             )
             val topHz = display?.supportedModes?.maxOfOrNull { it.refreshRate }?.toInt()
             appendLine("Animates at up to ${topHz ?: "?"}Hz")
-            appendLine("Effect: Roll when closing, Slide when opening")
+            appendLine("Effect: Lumen Line, closing and opening")
         }
     }
 
