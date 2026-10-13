@@ -79,6 +79,16 @@ class MainActivity : Activity(), SensorEventListener {
             stopService(Intent(this, FoldMotionService::class.java))
             refresh()
         })
+        root.addView(button("Let it run in the background") {
+            // Exempts the app from battery optimisation so Android stops putting it to sleep
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+                )
+            }.onFailure {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+        })
         hapticsButton = button(hapticsLabel()) {
             Haptics.setEnabled(this, !Haptics.isEnabled(this))
             hapticsButton.text = hapticsLabel()
@@ -155,6 +165,16 @@ class MainActivity : Activity(), SensorEventListener {
                 if (AutoStart.isEnabled(this@MainActivity)) "Starts automatically after a restart: on"
                 else "Starts automatically after a restart: off (tap Start animation)"
             )
+            appendLine()
+            val exempt = getSystemService(android.os.PowerManager::class.java)
+                ?.isIgnoringBatteryOptimizations(packageName) == true
+            appendLine(
+                if (exempt) "Background running: allowed"
+                else "Background running: restricted (tap Let it run in the background)"
+            )
+            appendLine(if (FoldMotionService.running) "Service: running" else "Service: NOT running")
+            appendLine("Service last started: ${Status.describe(this@MainActivity, Status.STARTED)}")
+            appendLine("Effect last played: ${Status.describe(this@MainActivity, Status.PLAYED)}")
         }
     }
 

@@ -69,6 +69,10 @@ class FoldOverlayView(context: Context) : View(context) {
         val h = height.toFloat()
         val layer = if (alphaAll < 1f) canvas.saveLayerAlpha(0f, 0f, w, h, (255 * alphaAll).toInt()) else -1
 
+        // The effect is drawn right to left; mirror it so the wave runs left to right
+        val flip = canvas.save()
+        if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+
         // 1. Anticipation
         solid.color = Color.argb((255 * 0.2f * sm(p / 0.3f)).toInt(), 0, 0, 0)
         canvas.drawRect(0f, 0f, w, h, solid)
@@ -178,6 +182,7 @@ class FoldOverlayView(context: Context) : View(context) {
             canvas.drawRect(max(0f, front), 0f, w + 1f, h, fill)
         }
 
+        canvas.restoreToCount(flip)
         if (layer >= 0) canvas.restoreToCount(layer)
     }
 

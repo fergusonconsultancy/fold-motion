@@ -42,6 +42,12 @@ object MotionConfig {
      */
     const val IDLE_WINDOW_ALPHA = 0.8f
 
+    /** Direction of the wave across the inner screen. Changed to left to right on 13 Oct 2026. */
+    const val LEFT_TO_RIGHT = true
+
+    /** Anything still playing after this long is stuck and gets reset. */
+    const val WATCHDOG_MS = 3000L
+
     /** Android's standard hinge sensor reports 90 degree steps; ignore jitter below this. */
     const val MOVE_THRESHOLD_DEG = 1.5f
 }

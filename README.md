@@ -1,6 +1,6 @@
 # Fold Motion
 
-A Louvre Signature fold transition for the Galaxy Z Fold8 Ultra, in Visconti green. As you close the phone, metallic blades turn across the inner screen from right to left, each flashing as it catches the light and casting a shadow ahead of it. A pulse of warm light runs back along the seams with a haptic click, then a green-to-black dusk rolls in so the screen meets One UI's panel switch without a jolt. Opening is left clean. Starts automatically after a restart or app update once switched on.
+A Louvre Signature fold transition for the Galaxy Z Fold8 Ultra, in Visconti green. As you close the phone, metallic blades turn across the inner screen from left to right, each flashing as it catches the light and casting a shadow ahead of it. A pulse of warm light runs back along the seams with a haptic click, then a green-to-black dusk rolls in from the left so the screen meets One UI's panel switch without a jolt. Opening is left clean. Starts automatically after a restart or app update once switched on.
 
 ## Get the APK (no Android Studio needed)
 

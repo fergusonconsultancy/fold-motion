@@ -60,6 +60,11 @@ class FoldMotionService : Service(), SensorEventListener {
     private var ticking = false
 
     private val haptics by lazy { Haptics(this) }
+
+    companion object {
+        /** True while the service is alive in this process; shown on the home screen. */
+        @Volatile var running = false
+    }
     private var tickDone = false
     private var clickDone = false
 
@@ -94,6 +99,8 @@ class FoldMotionService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         startAsForeground()
+        running = true
+        Status.mark(this, Status.STARTED)
 
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return }
 
@@ -118,8 +125,20 @@ class FoldMotionService : Service(), SensorEventListener {
         windowContext?.let { runCatching { it.unregisterComponentCallbacks(displayCallbacks) } }
         overlay?.let { runCatching { windowManager.removeView(it) } }
         overlay = null
+        running = false
         super.onDestroy()
     }
+
+    /**
+     * Reads the shape of the screen actually showing right now, rather than
+     * relying only on One UI's switch notifications, which can be missed (for
+     * example when the phone closes as the screen locks). A missed one used to
+     * leave the app thinking the cover was showing, so closing never triggered.
+     */
+    private fun innerShowingNow(): Boolean = runCatching {
+        val b = windowManager.currentWindowMetrics.bounds
+        FoldMath.isInnerShape(b.width().toFloat(), b.height().toFloat())
+    }.getOrDefault(currentInner)
 
     // region Overlay window
 
@@ -190,16 +209,26 @@ class FoldMotionService : Service(), SensorEventListener {
         val previous = lastAngle
         lastAngle = angle
         if (previous < 0f || abs(angle - previous) < MotionConfig.MOVE_THRESHOLD_DEG) return
-        lastStepAt = SystemClock.uptimeMillis()
+        val now = SystemClock.uptimeMillis()
+        lastStepAt = now
+
+        // Watchdog: nothing should ever run this long. If a sequence got stuck,
+        // clear it, otherwise it would silently block every fold after it.
+        if (phase != Phase.IDLE && now - phaseAt > MotionConfig.WATCHDOG_MS) finish()
+
+        // Resync which screen is showing while nothing is playing
+        val innerNow = innerShowingNow()
+        if (phase == Phase.IDLE) currentInner = innerNow
 
         val closing = angle < previous
         val scale = animScale()
         when {
             // Closing the inner screen: the only direction with an effect
-            phase == Phase.IDLE && currentInner && closing -> {
+            phase == Phase.IDLE && innerNow && closing -> {
                 playMs = MotionConfig.EFFECT_MS * scale
                 tickDone = false
                 clickDone = false
+                Status.mark(this, Status.PLAYED)
                 enter(Phase.PLAYING)
             }
             // Opened back up mid-fold: let the blades go
