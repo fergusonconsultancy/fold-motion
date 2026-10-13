@@ -43,6 +43,9 @@ class FoldOverlayView(context: Context) : View(context) {
     private var p = 0f
     private var alphaAll = 0f
 
+    /** Frames this view actually drew since the last reset; compared against frames requested. */
+    var drawCount = 0
+
     private val density = resources.displayMetrics.density
     private val m = Matrix()
 
@@ -107,6 +110,7 @@ class FoldOverlayView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         if (alphaAll <= 0.001f || p <= 0f) return
+        drawCount++
         val w = width.toFloat()
         val h = height.toFloat()
         val layer = if (alphaAll < 1f) canvas.saveLayerAlpha(0f, 0f, w, h, (255 * alphaAll).toInt()) else -1

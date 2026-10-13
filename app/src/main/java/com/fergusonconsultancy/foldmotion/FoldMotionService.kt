@@ -302,7 +302,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val decision = when {
             !closing -> "opening, nothing to play"
             !innerNow -> "closing, but the cover is showing: skipped"
-            phase != Phase.IDLE -> "closing, but an effect is already running: skipped"
+            phase != Phase.IDLE -> "still closing, effect already playing"
             scale <= 0f -> "closing, but animations are off in Developer options: skipped"
             else -> "closing on the inner screen: PLAYED"
         }
@@ -315,6 +315,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 playMs = Timing.fittedMs(this, MotionConfig.EFFECT_MS * scale)
                 playStartAt = now
                 stats.reset()
+                overlay?.drawCount = 0
                 tickDone = false
                 clickDone = false
                 Status.mark(this, Status.PLAYED)
@@ -360,7 +361,28 @@ class FoldMotionService : Service(), SensorEventListener {
     }
 
     private fun saveRun(completedPercent: Int) {
-        stats.result()?.let { Status.saveRun(this, it, playMs.roundToInt(), completedPercent) }
+        val r = stats.result()
+        r?.let { Status.saveRun(this, it, playMs.roundToInt(), completedPercent) }
+        logOverlayCheck(r?.frames ?: 0)
+    }
+
+    /**
+     * Records whether Android actually showed the overlay during the run:
+     * attached to a window, the window visible, and how many frames the view
+     * really drew against how many the animation asked for.
+     */
+    private fun logOverlayCheck(framesRequested: Int) {
+        val v = overlay ?: run { EventLog.add(this, "Overlay check: no overlay view"); return }
+        val win = when (v.windowVisibility) {
+            View.VISIBLE -> "visible"
+            View.INVISIBLE -> "INVISIBLE"
+            else -> "GONE"
+        }
+        EventLog.add(
+            this,
+            "Overlay check: attached ${if (v.isAttachedToWindow) "yes" else "NO"}, window $win, " +
+                "size ${v.width}x${v.height}, drew ${v.drawCount} of $framesRequested frames"
+        )
     }
 
     private fun isInteractive(): Boolean =
