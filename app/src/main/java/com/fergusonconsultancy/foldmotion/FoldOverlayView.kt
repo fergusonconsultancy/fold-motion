@@ -20,13 +20,16 @@ class FoldOverlayView(context: Context) : View(context) {
 
     private var p = 0f
     private var alphaAll = 0f
+    private var glow = 1f
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val core = Paint().apply { color = Color.argb(242, 255, 255, 255) }
 
-    fun show(progress: Float, alpha: Float = 1f) {
+    /** glow scales the blade's bloom and core, for the resting afterglow on opening. */
+    fun show(progress: Float, alpha: Float = 1f, glow: Float = 1f) {
         p = FoldMath.clamp(progress)
         alphaAll = FoldMath.clamp(alpha)
+        this.glow = FoldMath.clamp(glow)
         invalidate()
     }
 
@@ -61,9 +64,10 @@ class FoldOverlayView(context: Context) : View(context) {
         }
 
         // Wide bloom, then the tight glow, then the bright core
-        band(canvas, x, w * 0.09f, 0.35f * (1f - p * 0.5f), h)
-        band(canvas, x, w * 0.02f, 0.9f, h)
+        band(canvas, x, w * 0.09f, 0.35f * (1f - p * 0.5f) * glow, h)
+        band(canvas, x, w * 0.02f, 0.9f * glow, h)
         val half = resources.displayMetrics.density
+        core.alpha = (242 * glow).toInt()
         canvas.drawRect(x - half, 0f, x + half, h, core)
 
         if (layer >= 0) canvas.restoreToCount(layer)

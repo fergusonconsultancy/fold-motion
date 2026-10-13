@@ -20,6 +20,16 @@ object MotionConfig {
      */
     const val OPENING_FIT_MS = 60L
 
+    /**
+     * Opening stops short of black: the blade comes to rest just inside the
+     * hinge edge, so the violet afterglow holds on the cover until One UI
+     * switches, rather than the cover sitting dark for up to ~240ms.
+     */
+    const val OPENING_END_P = 0.9f
+
+    /** How long the resting afterglow takes to ease its bloom down while it holds. */
+    const val AFTERGLOW_SETTLE_MS = 400L
+
     /** Stay dark this long after the sweep if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L
     const val FADE_MS = 200L

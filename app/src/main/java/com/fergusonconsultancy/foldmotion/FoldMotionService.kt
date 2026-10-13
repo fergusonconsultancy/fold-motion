@@ -55,6 +55,7 @@ class FoldMotionService : Service(), SensorEventListener {
     private var phase = Phase.IDLE
     private var phaseAt = 0L
     private var playMs = MotionConfig.EFFECT_MS.toFloat()
+    private var endP = 1f
     private var fadeFrom = 1f
     private var ticking = false
 
@@ -192,10 +193,13 @@ class FoldMotionService : Service(), SensorEventListener {
         when {
             phase == Phase.IDLE && currentInner && closing -> {
                 playMs = MotionConfig.EFFECT_MS * scale
+                endP = 1f
                 enter(Phase.PLAYING)
             }
             phase == Phase.IDLE && !currentInner && !closing -> {
                 playMs = minOf(MotionConfig.EFFECT_MS * scale, MotionConfig.OPENING_FIT_MS.toFloat())
+                // Stop with the blade resting at the hinge so the afterglow holds
+                endP = MotionConfig.OPENING_END_P
                 enter(Phase.PLAYING)
             }
             // Reversed mid-fold: let the panels go
@@ -221,8 +225,8 @@ class FoldMotionService : Service(), SensorEventListener {
     private fun elapsed() = (SystemClock.uptimeMillis() - phaseAt).toFloat()
 
     private fun currentProgress(): Float = when (phase) {
-        Phase.PLAYING -> FoldMath.glide(FoldMath.clamp(elapsed() / playMs))
-        Phase.HOLDING -> 1f
+        Phase.PLAYING -> FoldMath.glide(FoldMath.clamp(elapsed() / playMs)) * endP
+        Phase.HOLDING -> endP
         else -> 0f
     }
 
@@ -247,16 +251,21 @@ class FoldMotionService : Service(), SensorEventListener {
             Phase.IDLE -> { finish(); return }
             Phase.PLAYING -> {
                 val k = FoldMath.clamp(t / playMs)
-                view.show(FoldMath.glide(k))
+                view.show(FoldMath.glide(k) * endP)
                 if (k >= 1f) enter(Phase.HOLDING)
             }
             Phase.HOLDING -> {
-                view.show(1f)
-                if (t > MotionConfig.HOLD_TIMEOUT_MS * scale) { fadeFrom = 1f; enter(Phase.FADING) }
+                // Closing holds black. Opening holds the afterglow at the hinge,
+                // its bloom easing down gently while One UI switches panels.
+                val glow = if (endP < 1f)
+                    1f - 0.6f * FoldMath.glide(FoldMath.clamp(t / (MotionConfig.AFTERGLOW_SETTLE_MS * scale)))
+                else 1f
+                view.show(endP, 1f, glow)
+                if (t > MotionConfig.HOLD_TIMEOUT_MS * scale) { fadeFrom = endP; enter(Phase.FADING) }
             }
             Phase.FADING -> {
                 val k = FoldMath.clamp(t / (MotionConfig.FADE_MS * scale))
-                view.show(fadeFrom, 1f - FoldMath.glide(k))
+                view.show(fadeFrom, 1f - FoldMath.glide(k), if (endP < 1f) 0.4f else 1f)
                 if (k >= 1f) { finish(); return }
             }
         }
