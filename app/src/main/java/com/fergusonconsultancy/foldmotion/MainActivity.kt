@@ -22,6 +22,7 @@ import android.widget.TextView
 class MainActivity : Activity(), SensorEventListener {
 
     private lateinit var status: TextView
+    private lateinit var logText: TextView
     private lateinit var angleText: TextView
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
@@ -98,6 +99,26 @@ class MainActivity : Activity(), SensorEventListener {
         }
         root.addView(hapticsButton)
 
+        root.addView(TextView(this).apply {
+            text = "Event log"
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ink)
+            setPadding(0, pad, 0, pad / 3)
+        })
+        logText = TextView(this).apply {
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setTextColor(muted)
+            setLineSpacing(0f, 1.25f)
+            setTextIsSelectable(true)
+        }
+        root.addView(logText)
+        root.addView(button("Clear log") {
+            EventLog.clear(this)
+            refresh()
+        })
+
         // Scrolls, so a long sensor list never pushes the buttons off screen
         setContentView(android.widget.ScrollView(this).apply {
             setBackgroundColor(Color.rgb(15, 16, 20))
@@ -140,6 +161,7 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     private fun refresh() {
+        if (::logText.isInitialized) logText.text = EventLog.read(this)
         val overlayOk = Settings.canDrawOverlays(this)
         status.text = buildString {
             appendLine(if (hingeSensor != null) "Hinge sensor: found" else "Hinge sensor: NOT found on this phone")

@@ -44,6 +44,7 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
+    private var hingeSensorPlain: Sensor? = null
 
     private lateinit var windowManager: WindowManager
     private var windowContext: Context? = null
@@ -82,8 +83,8 @@ class FoldMotionService : Service(), SensorEventListener {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> stopListening()
-                Intent.ACTION_SCREEN_ON -> startListening()
+                Intent.ACTION_SCREEN_OFF -> { stopListening(); EventLog.add(context, "Screen off, paused") }
+                Intent.ACTION_SCREEN_ON -> { startListening(); EventLog.add(context, "Screen on, listening") }
             }
         }
     }
@@ -111,6 +112,7 @@ class FoldMotionService : Service(), SensorEventListener {
             }
 
             playStartAt = 0L
+            EventLog.add(this@FoldMotionService, if (inner) "One UI switched to the inner screen" else "One UI switched to the cover")
             recordSwitch(inner)
             // The arriving screen is always clean
             finish()
@@ -128,12 +130,31 @@ class FoldMotionService : Service(), SensorEventListener {
         running = true
         Status.mark(this, Status.STARTED)
         HealJob.schedule(this)
+        installCrashRecorder()
 
-        if (!Settings.canDrawOverlays(this)) { stopSelf(); return }
+        if (!Settings.canDrawOverlays(this)) {
+            EventLog.add(this, "Service stopped: display over other apps not allowed")
+            stopSelf(); return
+        }
 
         sensorManager = getSystemService(SensorManager::class.java)
-        hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
-        if (hingeSensor == null) { stopSelf(); return }
+        // Both variants of the hinge sensor. The wake-up variant alone may not be
+        // delivered to an app in the background on some phones; listening to both
+        // and ignoring duplicates costs nothing.
+        hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE, true)
+        hingeSensorPlain = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE, false)
+        if (hingeSensor == null && hingeSensorPlain == null) {
+            hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
+        }
+        if (hingeSensor == null && hingeSensorPlain == null) {
+            EventLog.add(this, "Service stopped: no hinge sensor")
+            stopSelf(); return
+        }
+        EventLog.add(
+            this,
+            "Service started (hinge sensors: wake-up ${if (hingeSensor != null) "yes" else "no"}, " +
+                "plain ${if (hingeSensorPlain != null) "yes" else "no"})"
+        )
 
         addOverlay()
         startListening()
@@ -146,6 +167,7 @@ class FoldMotionService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
+        EventLog.add(this, "Service stopped")
         stopListening()
         runCatching { unregisterReceiver(screenReceiver) }
         Choreographer.getInstance().removeFrameCallback(frameCallback)
@@ -224,7 +246,31 @@ class FoldMotionService : Service(), SensorEventListener {
     // region Hinge sensor
 
     private fun startListening() {
-        hingeSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        val a = hingeSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) } ?: false
+        val b = hingeSensorPlain?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) } ?: false
+        if (!a && !b) EventLog.add(this, "Could not register for hinge events")
+    }
+
+    /** Records the reason if the service ever crashes, then lets Android handle it as normal. */
+    private fun installCrashRecorder() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        if (previous is CrashRecorder) return
+        Thread.setDefaultUncaughtExceptionHandler(CrashRecorder(applicationContext, previous))
+    }
+
+    private class CrashRecorder(
+        val context: Context,
+        val next: Thread.UncaughtExceptionHandler?
+    ) : Thread.UncaughtExceptionHandler {
+        override fun uncaughtException(t: Thread, e: Throwable) {
+            runCatching {
+                val where = e.stackTrace.firstOrNull { it.className.contains("foldmotion") }
+                EventLog.add(context, "CRASH ${e.javaClass.simpleName}: ${e.message} at ${where?.fileName}:${where?.lineNumber}")
+                // apply() is asynchronous; give it a moment to reach disk before the process dies
+                Thread.sleep(150)
+            }
+            next?.uncaughtException(t, e)
+        }
     }
 
     private fun stopListening() {
@@ -250,6 +296,18 @@ class FoldMotionService : Service(), SensorEventListener {
 
         val closing = angle < previous
         val scale = animScale()
+
+        // Record what was seen and decided, for the home screen log
+        val step = "Hinge ${previous.roundToInt()}° to ${angle.roundToInt()}°"
+        val decision = when {
+            !closing -> "opening, nothing to play"
+            !innerNow -> "closing, but the cover is showing: skipped"
+            phase != Phase.IDLE -> "closing, but an effect is already running: skipped"
+            scale <= 0f -> "closing, but animations are off in Developer options: skipped"
+            else -> "closing on the inner screen: PLAYED"
+        }
+        EventLog.add(this, "$step, $decision")
+
         when {
             // Closing the inner screen: the only direction with an effect
             phase == Phase.IDLE && innerNow && closing -> {
