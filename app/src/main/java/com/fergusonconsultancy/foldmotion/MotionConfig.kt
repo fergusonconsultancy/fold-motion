@@ -1,13 +1,14 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * Lumen Line, both directions. Chosen in Fold Motion Studio on 13 Oct 2026:
- *   closingEffect "lumen", openingEffect "lumen", effectMs 725, previewed at 1x
+ * Lumen Line with a smoked glass finish, both directions. Chosen in Fold Motion
+ * Studio on 13 Oct 2026: closingEffect "lumenglass", openingEffect "lumenglass",
+ * effectMs 725, previewed at 1x.
  *
- * A blade of light sweeps right to left with a soft bloom, leaving a violet
- * afterglow that cools to black. It only ever plays on the screen being
- * folded away and the arriving screen is always clean. Durations follow
- * Developer options > Animator duration scale.
+ * A blade of light sweeps right to left with a soft bloom, leaving dark smoked
+ * glass behind it with the violet afterglow caught in the surface. It only
+ * ever plays on the screen being folded away and the arriving screen is always
+ * clean. Durations follow Developer options > Animator duration scale.
  */
 object MotionConfig {
     /** Closing sweep length before Animator duration scale. */

@@ -28,7 +28,7 @@ import android.view.WindowManager
 import kotlin.math.abs
 
 /**
- * Plays Lumen Line on the screen being folded away, in both directions.
+ * Plays Lumen Line with a smoked glass finish on the screen being folded away, in both directions.
  *
  * Trigger: Android's hinge sensor, which on the Fold8 Ultra only reports
  * 0, 90 and 180 degrees. Closing starts when the inner screen sees the hinge
@@ -255,7 +255,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 if (k >= 1f) enter(Phase.HOLDING)
             }
             Phase.HOLDING -> {
-                // Closing holds black. Opening holds the afterglow at the hinge,
+                // Closing holds the smoked glass. Opening holds the afterglow at the hinge,
                 // its bloom easing down gently while One UI switches panels.
                 val glow = if (endP < 1f)
                     1f - 0.6f * FoldMath.glide(FoldMath.clamp(t / (MotionConfig.AFTERGLOW_SETTLE_MS * scale)))
@@ -304,7 +304,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Lumen Line on fold and unfold")
+            .setContentText("Lumen Line with smoked glass")
             .setOngoing(true)
             .build()
 
