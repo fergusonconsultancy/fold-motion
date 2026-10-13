@@ -64,9 +64,22 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private val haptics by lazy { Haptics(this) }
 
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** If Android has delivered no frames shortly after a run starts, say so in the log. */
+    private val frameCheck = Runnable {
+        if (phase == Phase.PLAYING && stats.result() == null) {
+            EventLog.add(this, "WARNING: Android delivered no animation frames in ${FRAME_CHECK_MS}ms")
+        }
+    }
+
     companion object {
         /** True while the service is alive in this process; shown on the home screen. */
         @Volatile var running = false
+
+        /** Idle window size in pixels: present, so the app keeps its frame signal, but invisible. */
+        private const val IDLE_SIZE = 1
+        private const val FRAME_CHECK_MS = 250L
     }
     private var tickDone = false
     private var clickDone = false
@@ -199,9 +212,12 @@ class FoldMotionService : Service(), SensorEventListener {
         windowContext = ctx
         windowManager = ctx.getSystemService(WindowManager::class.java)
 
+        // Starts as an invisible 1x1 pixel. It is never hidden: an app with nothing
+        // visible on screen stops receiving Android's frame signal (vsync), which
+        // is why the effect never ticked while another app was in front.
         params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
+            IDLE_SIZE,
+            IDLE_SIZE,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -212,6 +228,9 @@ class FoldMotionService : Service(), SensorEventListener {
             alpha = MotionConfig.IDLE_WINDOW_ALPHA
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             title = "FoldMotionOverlay"
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            x = 0
+            y = 0
         }
 
         val config = ctx.resources.configuration
@@ -220,24 +239,28 @@ class FoldMotionService : Service(), SensorEventListener {
         ctx.registerComponentCallbacks(displayCallbacks)
 
         overlay = FoldOverlayView(ctx).also {
-            it.visibility = View.GONE
+            it.visibility = View.VISIBLE
             windowManager.addView(it, params)
         }
     }
 
     /**
-     * While an effect is on screen: full opacity so black is truly black, and
-     * the panel's top refresh rate so the sweep is smooth. Both are released
-     * the moment the effect ends.
+     * While an effect is on screen: full screen, full opacity so black is truly
+     * black, and the panel's top refresh rate so the sweep is smooth. Between
+     * effects: an invisible 1x1 pixel at 80% opacity, which costs nothing to
+     * composite but keeps the app on Android's frame schedule.
      */
     private fun setActiveWindow(active: Boolean) {
         val view = overlay ?: return
         if (!::params.isInitialized) return
         val alpha = if (active) 1f else MotionConfig.IDLE_WINDOW_ALPHA
         val hz = if (active) display?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 0f else 0f
-        if (params.alpha == alpha && params.preferredRefreshRate == hz) return
+        val size = if (active) WindowManager.LayoutParams.MATCH_PARENT else IDLE_SIZE
+        if (params.alpha == alpha && params.preferredRefreshRate == hz && params.width == size) return
         params.alpha = alpha
         params.preferredRefreshRate = hz
+        params.width = size
+        params.height = size
         runCatching { windowManager.updateViewLayout(view, params) }
     }
 
@@ -352,8 +375,11 @@ class FoldMotionService : Service(), SensorEventListener {
         if (animScale() <= 0f) { finish(); return }
         phase = next
         phaseAt = SystemClock.uptimeMillis()
-        overlay?.visibility = View.VISIBLE
         setActiveWindow(true)
+        if (next == Phase.PLAYING) {
+            mainHandler.removeCallbacks(frameCheck)
+            mainHandler.postDelayed(frameCheck, FRAME_CHECK_MS)
+        }
         if (!ticking) {
             ticking = true
             Choreographer.getInstance().postFrameCallback(frameCallback)
@@ -426,10 +452,8 @@ class FoldMotionService : Service(), SensorEventListener {
         phase = Phase.IDLE
         ticking = false
         Choreographer.getInstance().removeFrameCallback(frameCallback)
-        overlay?.let {
-            it.clearAll()
-            it.visibility = View.GONE
-        }
+        mainHandler.removeCallbacks(frameCheck)
+        overlay?.clearAll()
         setActiveWindow(false)
     }
 
