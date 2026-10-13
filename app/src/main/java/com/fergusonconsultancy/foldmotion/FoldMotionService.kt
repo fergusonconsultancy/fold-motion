@@ -28,7 +28,8 @@ import android.view.WindowManager
 import kotlin.math.abs
 
 /**
- * Plays Louvre on the inner screen as the phone closes. Opening is left clean.
+ * Plays Louvre Signature in Visconti green on the inner screen as the phone closes,
+ * with haptic ticks timed to the light. Opening is left clean.
  *
  * Trigger: Android's hinge sensor, which on the Fold8 Ultra only reports
  * 0, 90 and 180 degrees. The effect starts when the inner screen sees the
@@ -57,6 +58,10 @@ class FoldMotionService : Service(), SensorEventListener {
     private var playMs = MotionConfig.EFFECT_MS.toFloat()
     private var fadeFrom = 1f
     private var ticking = false
+
+    private val haptics by lazy { Haptics(this) }
+    private var tickDone = false
+    private var clickDone = false
 
     private val frameCallback = Choreographer.FrameCallback { onFrame() }
 
@@ -193,6 +198,8 @@ class FoldMotionService : Service(), SensorEventListener {
             // Closing the inner screen: the only direction with an effect
             phase == Phase.IDLE && currentInner && closing -> {
                 playMs = MotionConfig.EFFECT_MS * scale
+                tickDone = false
+                clickDone = false
                 enter(Phase.PLAYING)
             }
             // Opened back up mid-fold: let the blades go
@@ -243,7 +250,11 @@ class FoldMotionService : Service(), SensorEventListener {
             Phase.IDLE -> { finish(); return }
             Phase.PLAYING -> {
                 val k = FoldMath.clamp(t / playMs)
-                view.show(FoldMath.glide(k))
+                val p = FoldMath.glide(k)
+                view.show(p)
+                // Haptics timed to the light: tick as the blades start, click on the pulse
+                if (!tickDone && p >= MotionConfig.TICK_AT) { tickDone = true; haptics.tick() }
+                if (!clickDone && p >= MotionConfig.CLICK_AT) { clickDone = true; haptics.click() }
                 if (k >= 1f) enter(Phase.HOLDING)
             }
             Phase.HOLDING -> {
@@ -292,7 +303,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Louvre when closing")
+            .setContentText("Louvre Signature when closing")
             .setOngoing(true)
             .build()
 

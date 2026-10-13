@@ -79,6 +79,12 @@ class MainActivity : Activity(), SensorEventListener {
             stopService(Intent(this, FoldMotionService::class.java))
             refresh()
         })
+        hapticsButton = button(hapticsLabel()) {
+            Haptics.setEnabled(this, !Haptics.isEnabled(this))
+            hapticsButton.text = hapticsLabel()
+            refresh()
+        }
+        root.addView(hapticsButton)
 
         // Scrolls, so a long sensor list never pushes the buttons off screen
         setContentView(android.widget.ScrollView(this).apply {
@@ -92,6 +98,11 @@ class MainActivity : Activity(), SensorEventListener {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
     }
+
+    private lateinit var hapticsButton: Button
+
+    private fun hapticsLabel() =
+        if (Haptics.isEnabled(this)) "Haptics: on (tap to turn off)" else "Haptics: off (tap to turn on)"
 
     private fun button(label: String, onClick: () -> Unit) = Button(this).apply {
         text = label
@@ -139,7 +150,7 @@ class MainActivity : Activity(), SensorEventListener {
             )
             val topHz = display?.supportedModes?.maxOfOrNull { it.refreshRate }?.toInt()
             appendLine("Animates at up to ${topHz ?: "?"}Hz")
-            appendLine("Effect: Louvre when closing. Opening is left clean.")
+            appendLine("Effect: Louvre Signature in Visconti green when closing. Opening is left clean.")
             appendLine(
                 if (AutoStart.isEnabled(this@MainActivity)) "Starts automatically after a restart: on"
                 else "Starts automatically after a restart: off (tap Start animation)"
