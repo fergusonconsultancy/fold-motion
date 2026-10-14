@@ -63,13 +63,28 @@ class FoldOverlayView(context: Context) : View(context) {
     )
     // The plane: lit green at its edge, cooling to near black behind it
     private val planeShader = unitH(
-        intArrayOf(Color.rgb(22, 132, 74), Color.rgb(8, 98, 54), Color.rgb(3, 62, 34), Color.rgb(1, 20, 11)),
+        intArrayOf(Color.rgb(10, 150, 76), Color.rgb(2, 112, 56), Color.rgb(0, 70, 34), Color.rgb(0, 22, 10)),
         floatArrayOf(0f, 0.14f, 0.62f, 1f)
+    )
+    // Gloss: a clear-coat reflection with a bright core, drifting across the plane
+    private val glossShader = unitH(
+        intArrayOf(
+            Color.argb(0, 235, 255, 242), Color.argb(46, 235, 255, 242), Color.argb(170, 245, 255, 248),
+            Color.argb(46, 235, 255, 242), Color.argb(0, 235, 255, 242)
+        ),
+        floatArrayOf(0f, 0.32f, 0.5f, 0.68f, 1f)
+    )
+    // Lacquer: the top of the plane catches the light, like paint under a clear coat
+    private val lacquerShader = LinearGradient(
+        0f, 0f, 0f, 1f,
+        intArrayOf(Color.argb(40, 220, 255, 235), Color.argb(0, 220, 255, 235), Color.argb(0, 0, 0, 0), Color.argb(70, 0, 0, 0)),
+        floatArrayOf(0f, 0.38f, 0.7f, 1f),
+        Shader.TileMode.CLAMP
     )
     // A panel: dark at its outer edge, lit at its leading edge
     private val panelShader = unitH(
-        intArrayOf(Color.rgb(1, 20, 11), Color.rgb(6, 78, 42), Color.rgb(16, 128, 72), Color.rgb(90, 200, 140)),
-        floatArrayOf(0f, 0.62f, 0.94f, 1f)
+        intArrayOf(Color.BLACK, Color.rgb(0, 26, 13), Color.rgb(4, 92, 48), Color.rgb(14, 140, 74), Color.rgb(140, 230, 175)),
+        floatArrayOf(0f, 0.3f, 0.8f, 0.96f, 1f)
     )
     // A soft shadow cast ahead of a moving edge: black to clear
     private val shadeShader = unitH(intArrayOf(Color.BLACK, Color.TRANSPARENT), floatArrayOf(0f, 1f))
@@ -84,6 +99,8 @@ class FoldOverlayView(context: Context) : View(context) {
     private val planePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = planeShader }
     private val panelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = panelShader }
     private val shadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = shadeShader }
+    private val glossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glossShader }
+    private val lacquerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = lacquerShader }
 
     fun show(progress: Float, alpha: Float = 1f) {
         p = FoldMath.clamp(progress)
@@ -131,6 +148,21 @@ class FoldOverlayView(context: Context) : View(context) {
             m.setScale(tail, 1f); m.postTranslate(front, 0f)
             planeShader.setLocalMatrix(m)
             canvas.drawRect(max(0f, front), 0f, w + 1f, h, planePaint)
+            val left = max(0f, front)
+            // Lacquer across the whole plane
+            m.setScale(1f, h)
+            lacquerShader.setLocalMatrix(m)
+            canvas.drawRect(left, 0f, w + 1f, h, lacquerPaint)
+            // Gloss: travels slower than the plane, so the reflection seems to slide over a curved surface
+            val gw = w * 0.16f
+            val gx = front + w * (0.06f + 0.22f * e)
+            val gA = 1f - FoldMath.clamp((p - 0.7f) / 0.15f)
+            if (gA > 0f && gx + gw > left) {
+                m.setScale(gw, 1f); m.postTranslate(gx, 0f)
+                glossShader.setLocalMatrix(m)
+                glossPaint.alpha = (255 * gA).toInt()
+                canvas.drawRect(max(left, gx), 0f, min(w + 1f, gx + gw), h, glossPaint)
+            }
             // shadow cast ahead of the plane
             shade(canvas, front, -w * 0.06f, h, 0.4f)
             // champagne leading edge, fading as the plane reaches the far side
@@ -174,37 +206,46 @@ class FoldOverlayView(context: Context) : View(context) {
 
     // endregion
 
-    // region Crease Split (opening, played backwards)
+    // region Crease Split (opening reveal)
 
+    /**
+     * Runs on reveal progress r = 1 - p: black, then the two green panels fade
+     * up with deep shadowed outer edges, then the crease flashes, then the
+     * panels part outwards to show the screen. At p = 1 the screen is black.
+     */
     private fun drawCreaseSplit(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
         val cx = w / 2f
-        val eA = FoldMath.glide(FoldMath.clamp(p / 0.62f))
-        val eB = FoldMath.glide(FoldMath.clamp((p - 0.08f) / 0.62f))
-        val xa = w - (w - cx) * eA      // leading panel: from the leading edge to the crease
-        val xb = cx * eB                // trailing panel: from the far edge to the crease
-        val meet = FoldMath.clamp((p - 0.6f) / 0.1f)
-        val sw = w * 0.07f
+        // Panels part from the crease, the leading one first
+        val eA = FoldMath.glide(FoldMath.clamp((r - 0.28f) / 0.62f))
+        val eB = FoldMath.glide(FoldMath.clamp((r - 0.36f) / 0.64f))
+        val xa = cx + (w - cx) * eA
+        val xb = cx - cx * eB
+        val sw = w * 0.1f
 
-        shade(canvas, xa, -sw, h, 0.4f * min(1f, eA * 5f) * (1f - meet))
-        shade(canvas, xb, sw, h, 0.4f * min(1f, eB * 5f) * (1f - meet))
         panel(canvas, w, xa, h)
         panel(canvas, 0f, xb, h)
-        edgeLine(canvas, xa, h, 0.8f * min(1f, eA * 6f) * (1f - meet), w * 0.018f, 0.22f)
-        edgeLine(canvas, xb, h, 0.8f * min(1f, eB * 6f) * (1f - meet), w * 0.018f, 0.22f)
+        // Deep shadows cast onto the screen as it is uncovered
+        shade(canvas, xa, -sw, h, 0.65f * min(1f, eA * 8f) * (1f - eA))
+        shade(canvas, xb, sw, h, 0.65f * min(1f, eB * 8f) * (1f - eB))
+        edgeLine(canvas, xa, h, 0.85f * min(1f, eA * 8f) * (1f - eA), w * 0.018f, 0.25f)
+        edgeLine(canvas, xb, h, 0.85f * min(1f, eB * 8f) * (1f - eB), w * 0.018f, 0.25f)
 
-        // The seam on the hinge burns where the panels meet
-        val burn = meet * (1f - FoldMath.clamp((p - 0.78f) / 0.12f))
-        if (burn > 0f) {
-            band(canvas, cx, 0f, h, w * 0.035f, 0.45f * burn)
-            seamPaint.alpha = (255 * 0.95f * burn).toInt()
-            canvas.drawRect(cx - 1f, 0f, cx + 1f, h, seamPaint)
+        // From black: the panels fade up
+        val black = 1f - FoldMath.smooth(FoldMath.clamp(r / 0.22f))
+        if (black > 0f) {
+            blackPaint.alpha = (255 * black).toInt()
+            canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
         }
 
-        // Green cools to black; at full progress the screen is solid black
-        val cool = FoldMath.smooth(FoldMath.clamp((p - 0.7f) / 0.26f))
-        if (cool > 0f) {
-            blackPaint.alpha = (255 * cool).toInt()
-            canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
+        // The flash on the crease, just before the panels part
+        val flash = FoldMath.smooth(FoldMath.clamp((r - 0.12f) / 0.12f)) *
+            (1f - FoldMath.smooth(FoldMath.clamp((r - 0.30f) / 0.2f)))
+        if (flash > 0f) {
+            band(canvas, cx, 0f, h, w * 0.22f, 0.22f * flash)
+            band(canvas, cx, 0f, h, w * 0.05f, 0.75f * flash)
+            seamPaint.alpha = (255 * flash).toInt()
+            canvas.drawRect(cx - 1.5f, 0f, cx + 1.5f, h, seamPaint)
         }
     }
 
