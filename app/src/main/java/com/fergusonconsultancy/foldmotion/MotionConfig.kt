@@ -35,8 +35,8 @@ object MotionConfig {
     /** Opening: give up if One UI has not switched to the main screen this long after arming. */
     const val ARM_TIMEOUT_MS = 700L
 
-    /** Opening: the overlay is cleared this long after the reveal should have ended, even if frames stall. */
-    const val REVEAL_GRACE_MS = 150L
+    /** Opening: the overlay is cleared this long after the reveal should have ended, even if frames stall. Covers a late first frame. */
+    const val REVEAL_GRACE_MS = 400L
 
     /**
      * Normal window opacity. Android 12+ blocks touches through another app's

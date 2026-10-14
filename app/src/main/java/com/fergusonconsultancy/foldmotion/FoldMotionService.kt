@@ -518,8 +518,11 @@ class FoldMotionService : Service(), SensorEventListener {
                     firstRevealFrameLogged = true
                     val lag = SystemClock.uptimeMillis() - switchedAt
                     if (lag > 100) EventLog.add(this, "First reveal frame ${lag}ms after the switch")
+                    // Start the clock on the first frame Android actually delivers, so a slow
+                    // panel switch cannot eat the start of the reveal
+                    phaseAt = SystemClock.uptimeMillis()
                 }
-                val k = FoldMath.clamp(t / revealMs)
+                val k = FoldMath.clamp(elapsed() / revealMs)
                 view.show(1f - FoldMath.glide(k))
                 stats.onFrame(frameTimeNanos)
                 if (k >= 1f) {

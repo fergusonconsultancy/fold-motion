@@ -58,17 +58,17 @@ class FoldOverlayView(context: Context) : View(context) {
         floatArrayOf(0f, 0.5f, 1f)
     )
     private val duskShader = unitH(
-        intArrayOf(Color.TRANSPARENT, Color.argb(204, 2, 13, 8), Color.BLACK),
+        intArrayOf(Color.TRANSPARENT, Color.argb(214, 1, 24, 13), Color.BLACK),
         floatArrayOf(0f, 0.5f, 1f)
     )
     // The plane: lit green at its edge, cooling to near black behind it
     private val planeShader = unitH(
-        intArrayOf(Color.rgb(52, 108, 74), Color.rgb(30, 76, 50), Color.rgb(10, 38, 24), Color.rgb(2, 7, 4)),
-        floatArrayOf(0f, 0.12f, 0.55f, 1f)
+        intArrayOf(Color.rgb(22, 132, 74), Color.rgb(8, 98, 54), Color.rgb(3, 62, 34), Color.rgb(1, 20, 11)),
+        floatArrayOf(0f, 0.14f, 0.62f, 1f)
     )
     // A panel: dark at its outer edge, lit at its leading edge
     private val panelShader = unitH(
-        intArrayOf(Color.rgb(3, 12, 8), Color.rgb(14, 50, 32), Color.rgb(44, 98, 66), Color.rgb(120, 170, 130)),
+        intArrayOf(Color.rgb(1, 20, 11), Color.rgb(6, 78, 42), Color.rgb(16, 128, 72), Color.rgb(90, 200, 140)),
         floatArrayOf(0f, 0.62f, 0.94f, 1f)
     )
     // A soft shadow cast ahead of a moving edge: black to clear
