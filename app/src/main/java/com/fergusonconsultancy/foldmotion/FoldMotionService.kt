@@ -37,8 +37,8 @@ import kotlin.math.roundToInt
  * Opening: Crease Split, played as a reveal on the main screen. When the
  * hinge reports 90 degrees on the cover, the overlay goes black at once
  * (ARMED), so the main screen is already covered when it lights. After One UI
- * switches, the app waits for the panel to report it is on (WAITING_PANEL),
- * then reveals it (REVEALING) and clears itself.
+ * switches, the reveal starts at once (REVEALING). Timers that do not rely
+ * on Android's frame signal guarantee the overlay is gone on time.
  *
  * Trigger: Android's hinge sensor, which on the Fold8 Ultra only reports
  * 0, 90 and 180 degrees.
@@ -79,6 +79,25 @@ class FoldMotionService : Service(), SensorEventListener {
             EventLog.add(this, "WARNING: Android delivered no animation frames in ${FRAME_CHECK_MS}ms")
         }
     }
+
+    /**
+     * Hard stops that do not depend on Android's frame signal. On 14 Oct the
+     * frame signal stalled for 5 to 10 seconds after the switch to the main
+     * screen, which left it dimmed; these clear the overlay on time regardless.
+     */
+    private val revealDeadline = Runnable {
+        if (phase == Phase.REVEALING) {
+            EventLog.add(this, "Reveal deadline: frames stalled after ${overlay?.drawCount ?: 0} drawn, screen cleared")
+            finish()
+        }
+    }
+    private val armDeadline = Runnable {
+        if (phase == Phase.ARMED) {
+            EventLog.add(this, "No switch to the main screen within ${MotionConfig.ARM_TIMEOUT_MS}ms: cover cleared")
+            finish()
+        }
+    }
+    private var firstRevealFrameLogged = false
 
     companion object {
         /** True while the service is alive in this process; shown on the home screen. */
@@ -135,9 +154,9 @@ class FoldMotionService : Service(), SensorEventListener {
             EventLog.add(this@FoldMotionService, if (inner) "One UI switched to the inner screen" else "One UI switched to the cover")
             recordSwitch(inner)
             if (inner && phase == Phase.ARMED) {
-                // Keep the main screen covered until it has lit, then reveal it
+                // Reveal straight away; no waiting on the panel, which stalled on 14 Oct
                 switchedAt = now
-                enter(Phase.WAITING_PANEL)
+                startReveal()
                 return
             }
             // Otherwise the arriving screen is always clean
@@ -355,6 +374,8 @@ class FoldMotionService : Service(), SensorEventListener {
                 overlay?.mode = FoldOverlayView.Mode.OPEN
                 overlay?.show(1f)
                 enter(Phase.ARMED)
+                mainHandler.removeCallbacks(armDeadline)
+                mainHandler.postDelayed(armDeadline, MotionConfig.ARM_TIMEOUT_MS)
             }
             // Changed their mind and closed again while still on the cover
             phase == Phase.ARMED && closing -> finish()
@@ -413,6 +434,28 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
 
+    private fun startReveal() {
+        mainHandler.removeCallbacks(armDeadline)
+        revealMs = MotionConfig.REVEAL_MS * animScale().coerceAtLeast(0.01f)
+        stats.reset()
+        overlay?.drawCount = 0
+        firstRevealFrameLogged = false
+        if (isInteractive()) haptics.settle()
+        Status.mark(this, Status.PLAYED)
+        enter(Phase.REVEALING)
+        // Re-apply the window and ask for a frame now, in case the switch dropped the pending one
+        overlay?.let { v ->
+            runCatching { windowManager.updateViewLayout(v, params) }
+            v.show(1f)
+        }
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
+        Choreographer.getInstance().postFrameCallback(frameCallback)
+        ticking = true
+        mainHandler.removeCallbacks(revealDeadline)
+        mainHandler.postDelayed(revealDeadline, revealMs.toLong() + MotionConfig.REVEAL_GRACE_MS)
+        EventLog.add(this, "Revealing (display state ${display?.state ?: -1})")
+    }
+
     private fun saveRun(completedPercent: Int) {
         val r = stats.result()
         r?.let { Status.saveRun(this, it, playMs.roundToInt(), completedPercent) }
@@ -466,32 +509,16 @@ class FoldMotionService : Service(), SensorEventListener {
                 view.show(1f)
                 if (t > MotionConfig.HOLD_TIMEOUT_MS * scale) { fadeFrom = 1f; enter(Phase.FADING) }
             }
-            Phase.ARMED -> {
-                // Cover held black until One UI switches; give up if it never does
+            Phase.ARMED, Phase.WAITING_PANEL -> {
+                // Cover held black until One UI switches; armDeadline clears it if it never does
                 view.show(1f)
-                if (t > MotionConfig.ARM_TIMEOUT_MS) {
-                    EventLog.add(this, "No switch to the main screen within ${MotionConfig.ARM_TIMEOUT_MS}ms: cover cleared")
-                    fadeFrom = 1f; enter(Phase.FADING)
-                }
-            }
-            Phase.WAITING_PANEL -> {
-                view.show(1f)
-                val lit = display?.state == Display.STATE_ON
-                if (lit || t > MotionConfig.PANEL_WAIT_MS) {
-                    EventLog.add(
-                        this,
-                        if (lit) "Main screen lit ${SystemClock.uptimeMillis() - switchedAt}ms after the switch: revealing"
-                        else "Main screen did not report lit within ${MotionConfig.PANEL_WAIT_MS}ms: revealing anyway"
-                    )
-                    revealMs = MotionConfig.REVEAL_MS * scale
-                    stats.reset()
-                    view.drawCount = 0
-                    if (isInteractive()) haptics.settle()
-                    Status.mark(this, Status.PLAYED)
-                    enter(Phase.REVEALING)
-                }
             }
             Phase.REVEALING -> {
+                if (!firstRevealFrameLogged) {
+                    firstRevealFrameLogged = true
+                    val lag = SystemClock.uptimeMillis() - switchedAt
+                    if (lag > 100) EventLog.add(this, "First reveal frame ${lag}ms after the switch")
+                }
                 val k = FoldMath.clamp(t / revealMs)
                 view.show(1f - FoldMath.glide(k))
                 stats.onFrame(frameTimeNanos)
@@ -519,6 +546,8 @@ class FoldMotionService : Service(), SensorEventListener {
         ticking = false
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         mainHandler.removeCallbacks(frameCheck)
+        mainHandler.removeCallbacks(revealDeadline)
+        mainHandler.removeCallbacks(armDeadline)
         overlay?.clearAll()
         setActiveWindow(false)
     }

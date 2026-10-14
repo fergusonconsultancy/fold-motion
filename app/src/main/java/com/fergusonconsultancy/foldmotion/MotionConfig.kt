@@ -7,7 +7,7 @@ package com.fergusonconsultancy.foldmotion
  *
  * Closing plays on the main screen and reaches black before One UI switches
  * to the cover. Opening blacks out the cover the moment the hinge reports
- * 90 degrees, then reveals the main screen once it has lit.
+ * 90 degrees, then reveals the main screen the moment One UI switches.
  *
  * The green is an approximation of Alfa Romeo's metallic Verde Visconti;
  * no official colour value was available.
@@ -35,8 +35,8 @@ object MotionConfig {
     /** Opening: give up if One UI has not switched to the main screen this long after arming. */
     const val ARM_TIMEOUT_MS = 700L
 
-    /** Opening: longest wait for the main screen to report it has lit before revealing anyway. */
-    const val PANEL_WAIT_MS = 400L
+    /** Opening: the overlay is cleared this long after the reveal should have ended, even if frames stall. */
+    const val REVEAL_GRACE_MS = 150L
 
     /**
      * Normal window opacity. Android 12+ blocks touches through another app's
