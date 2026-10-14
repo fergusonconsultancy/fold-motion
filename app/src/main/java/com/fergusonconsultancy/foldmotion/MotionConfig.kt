@@ -3,7 +3,7 @@ package com.fergusonconsultancy.foldmotion
 /**
  * Chosen in Fold Motion Studio on 14 Oct 2026:
  *   closingEffect "composition" (De Stijl, One Plane), openingEffect "creasesplit",
- *   finish "visconti", effectMs 900, revealMs 400, previewed at 1x
+ *   finish "visconti", effectMs 900, revealMs 400 (lengthened to 650 on 14 Oct after testing), previewed at 1x
  *
  * Closing plays on the main screen and reaches black before One UI switches
  * to the cover. Opening blacks out the cover the moment the hinge reports
@@ -17,7 +17,7 @@ object MotionConfig {
     const val EFFECT_MS = 900L
 
     /** Opening reveal length before Animator duration scale. Taps are ignored while it plays. */
-    const val REVEAL_MS = 400L
+    const val REVEAL_MS = 650L
 
     /** Closing stages, as shares of eased progress (0 to 1). Rules draw from 0. */
     const val PLANE_START = 0.20f
