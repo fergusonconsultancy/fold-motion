@@ -81,10 +81,10 @@ class FoldOverlayView(context: Context) : View(context) {
         floatArrayOf(0f, 0.38f, 0.7f, 1f),
         Shader.TileMode.CLAMP
     )
-    // A panel: dark at its outer edge, lit at its leading edge
+    // A panel: solid near-black, the green confined to a narrow lit lip at its leading edge
     private val panelShader = unitH(
-        intArrayOf(Color.BLACK, Color.rgb(0, 26, 13), Color.rgb(4, 92, 48), Color.rgb(14, 140, 74), Color.rgb(140, 230, 175)),
-        floatArrayOf(0f, 0.3f, 0.8f, 0.96f, 1f)
+        intArrayOf(Color.BLACK, Color.rgb(1, 9, 5), Color.rgb(2, 26, 14), Color.rgb(10, 110, 58), Color.rgb(150, 235, 185)),
+        floatArrayOf(0f, 0.7f, 0.93f, 0.985f, 1f)
     )
     // A soft shadow cast ahead of a moving edge: black to clear
     private val shadeShader = unitH(intArrayOf(Color.BLACK, Color.TRANSPARENT), floatArrayOf(0f, 1f))
@@ -221,13 +221,13 @@ class FoldOverlayView(context: Context) : View(context) {
         val eB = FoldMath.glide(FoldMath.clamp((r - 0.36f) / 0.64f))
         val xa = cx + (w - cx) * eA
         val xb = cx - cx * eB
-        val sw = w * 0.1f
+        val sw = w * 0.045f
 
         panel(canvas, w, xa, h)
         panel(canvas, 0f, xb, h)
         // Deep shadows cast onto the screen as it is uncovered
-        shade(canvas, xa, -sw, h, 0.65f * min(1f, eA * 8f) * (1f - eA))
-        shade(canvas, xb, sw, h, 0.65f * min(1f, eB * 8f) * (1f - eB))
+        shade(canvas, xa, -sw, h, 0.85f * min(1f, eA * 8f) * (1f - eA))
+        shade(canvas, xb, sw, h, 0.85f * min(1f, eB * 8f) * (1f - eB))
         edgeLine(canvas, xa, h, 0.85f * min(1f, eA * 8f) * (1f - eA), w * 0.018f, 0.25f)
         edgeLine(canvas, xb, h, 0.85f * min(1f, eB * 8f) * (1f - eB), w * 0.018f, 0.25f)
 
