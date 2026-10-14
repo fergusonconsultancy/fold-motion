@@ -30,17 +30,22 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Plays De Stijl Rules in Visconti green on the inner screen as the phone closes,
- * with haptic ticks timed to the light. Opening is left clean.
+ * Closing: De Stijl, One Plane in Visconti green on the main screen, with
+ * haptic ticks timed to the light. The moment One UI switches to the cover,
+ * the overlay is cleared so the cover arrives untouched.
+ *
+ * Opening: Crease Split, played as a reveal on the main screen. When the
+ * hinge reports 90 degrees on the cover, the overlay goes black at once
+ * (ARMED), so the main screen is already covered when it lights. After One UI
+ * switches, the app waits for the panel to report it is on (WAITING_PANEL),
+ * then reveals it (REVEALING) and clears itself.
  *
  * Trigger: Android's hinge sensor, which on the Fold8 Ultra only reports
- * 0, 90 and 180 degrees. The effect starts when the inner screen sees the
- * hinge drop. The moment One UI switches panels, the overlay is cleared so
- * the cover arrives untouched.
+ * 0, 90 and 180 degrees.
  */
 class FoldMotionService : Service(), SensorEventListener {
 
-    private enum class Phase { IDLE, PLAYING, HOLDING, FADING }
+    private enum class Phase { IDLE, PLAYING, HOLDING, FADING, ARMED, WAITING_PANEL, REVEALING }
 
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
@@ -59,6 +64,8 @@ class FoldMotionService : Service(), SensorEventListener {
     private var phase = Phase.IDLE
     private var phaseAt = 0L
     private var playMs = MotionConfig.EFFECT_MS.toFloat()
+    private var revealMs = MotionConfig.REVEAL_MS.toFloat()
+    private var switchedAt = 0L
     private var fadeFrom = 1f
     private var ticking = false
 
@@ -119,15 +126,21 @@ class FoldMotionService : Service(), SensorEventListener {
                         saveRun((elapsed() / playMs * 100f).roundToInt().coerceIn(0, 99))
                     }
                 }
-            } else if (isInteractive()) {
-                // Opened: a low settle as the inner screen arrives
+            } else if (isInteractive() && phase != Phase.ARMED) {
+                // Opened without a reveal: a low settle as the inner screen arrives
                 haptics.settle()
             }
 
             playStartAt = 0L
             EventLog.add(this@FoldMotionService, if (inner) "One UI switched to the inner screen" else "One UI switched to the cover")
             recordSwitch(inner)
-            // The arriving screen is always clean
+            if (inner && phase == Phase.ARMED) {
+                // Keep the main screen covered until it has lit, then reveal it
+                switchedAt = now
+                enter(Phase.WAITING_PANEL)
+                return
+            }
+            // Otherwise the arriving screen is always clean
             finish()
         }
 
@@ -323,7 +336,12 @@ class FoldMotionService : Service(), SensorEventListener {
         // Record what was seen and decided, for the home screen log
         val step = "Hinge ${previous.roundToInt()}° to ${angle.roundToInt()}°"
         val decision = when {
-            !closing -> "opening, nothing to play"
+            !closing && phase == Phase.ARMED -> "still opening, cover already blacked out"
+            !closing && innerNow -> "opening, main screen already showing"
+            !closing && phase != Phase.IDLE -> "opening, another effect is running"
+            !closing && scale <= 0f -> "opening, but animations are off in Developer options: skipped"
+            !closing -> "opening on the cover: ARMED, reveal to follow"
+            phase == Phase.ARMED -> "closed again before the switch: cover cleared"
             !innerNow -> "closing, but the cover is showing: skipped"
             phase != Phase.IDLE -> "still closing, effect already playing"
             scale <= 0f -> "closing, but animations are off in Developer options: skipped"
@@ -332,8 +350,17 @@ class FoldMotionService : Service(), SensorEventListener {
         EventLog.add(this, "$step, $decision")
 
         when {
-            // Closing the inner screen: the only direction with an effect
+            // Opening from the cover: black out now, so the main screen is covered when it lights
+            phase == Phase.IDLE && !innerNow && !closing && scale > 0f -> {
+                overlay?.mode = FoldOverlayView.Mode.OPEN
+                overlay?.show(1f)
+                enter(Phase.ARMED)
+            }
+            // Changed their mind and closed again while still on the cover
+            phase == Phase.ARMED && closing -> finish()
+            // Closing the inner screen
             phase == Phase.IDLE && innerNow && closing -> {
+                overlay?.mode = FoldOverlayView.Mode.CLOSE
                 // Fitted to this owner's closing speed once enough closes are learned
                 playMs = Timing.fittedMs(this, MotionConfig.EFFECT_MS * scale)
                 playStartAt = now
@@ -439,6 +466,45 @@ class FoldMotionService : Service(), SensorEventListener {
                 view.show(1f)
                 if (t > MotionConfig.HOLD_TIMEOUT_MS * scale) { fadeFrom = 1f; enter(Phase.FADING) }
             }
+            Phase.ARMED -> {
+                // Cover held black until One UI switches; give up if it never does
+                view.show(1f)
+                if (t > MotionConfig.ARM_TIMEOUT_MS) {
+                    EventLog.add(this, "No switch to the main screen within ${MotionConfig.ARM_TIMEOUT_MS}ms: cover cleared")
+                    fadeFrom = 1f; enter(Phase.FADING)
+                }
+            }
+            Phase.WAITING_PANEL -> {
+                view.show(1f)
+                val lit = display?.state == Display.STATE_ON
+                if (lit || t > MotionConfig.PANEL_WAIT_MS) {
+                    EventLog.add(
+                        this,
+                        if (lit) "Main screen lit ${SystemClock.uptimeMillis() - switchedAt}ms after the switch: revealing"
+                        else "Main screen did not report lit within ${MotionConfig.PANEL_WAIT_MS}ms: revealing anyway"
+                    )
+                    revealMs = MotionConfig.REVEAL_MS * scale
+                    stats.reset()
+                    view.drawCount = 0
+                    if (isInteractive()) haptics.settle()
+                    Status.mark(this, Status.PLAYED)
+                    enter(Phase.REVEALING)
+                }
+            }
+            Phase.REVEALING -> {
+                val k = FoldMath.clamp(t / revealMs)
+                view.show(1f - FoldMath.glide(k))
+                stats.onFrame(frameTimeNanos)
+                if (k >= 1f) {
+                    val r = stats.result()
+                    EventLog.add(
+                        this,
+                        "Reveal done: drew ${view.drawCount} of ${r?.frames ?: 0} frames" +
+                            (r?.let { ", ${it.fps}fps, ${it.dropped} dropped" } ?: "")
+                    )
+                    finish(); return
+                }
+            }
             Phase.FADING -> {
                 val k = FoldMath.clamp(t / (MotionConfig.FADE_MS * scale))
                 view.show(fadeFrom, 1f - FoldMath.glide(k))
@@ -478,7 +544,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("De Stijl Rules when closing")
+            .setContentText("One Plane when closing, Crease Split when opening")
             .setOngoing(true)
             .build()
 

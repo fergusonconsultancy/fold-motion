@@ -1,43 +1,51 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * De Stijl Rules in Visconti green, closing only. Chosen in Fold Motion
- * Studio on 13 Oct 2026, replacing Louvre Signature:
- *   closingEffect "destijl", finish "visconti", effectMs 900, previewed at 1x
+ * Chosen in Fold Motion Studio on 14 Oct 2026:
+ *   closingEffect "composition" (De Stijl, One Plane), openingEffect "creasesplit",
+ *   finish "visconti", effectMs 900, revealMs 400, previewed at 1x
  *
- * Opening is deliberately left clean: One UI hands over to the inner screen
- * 63 to 297ms after the hinge reports 90 degrees (measured on this phone),
- * too short to read, and the phone is usually opened edge-on anyway.
+ * Closing plays on the main screen and reaches black before One UI switches
+ * to the cover. Opening blacks out the cover the moment the hinge reports
+ * 90 degrees, then reveals the main screen once it has lit.
  *
  * The green is an approximation of Alfa Romeo's metallic Verde Visconti;
  * no official colour value was available.
  */
 object MotionConfig {
-    /** Effect length before Animator duration scale. */
+    /** Closing effect length before Animator duration scale. */
     const val EFFECT_MS = 900L
 
-    /** Stage timings, as shares of eased progress (0 to 1). Rules draw from 0. */
-    const val CELLS_START = 0.28f
-    const val CELLS_END = 0.82f
-    const val CELL_FILL = 0.14f
+    /** Opening reveal length before Animator duration scale. Taps are ignored while it plays. */
+    const val REVEAL_MS = 400L
+
+    /** Closing stages, as shares of eased progress (0 to 1). Rules draw from 0. */
+    const val PLANE_START = 0.20f
+    const val PLANE_SPAN = 0.60f
     const val DUSK_START = 0.80f
 
-    /** Haptic moments: a soft tick as the first rule starts to draw, a crisp click as the last cell lands. */
+    /** Haptic moments: a soft tick as the first rule draws, a crisp click as the plane lands. */
     const val TICK_AT = 0.03f
-    const val CLICK_AT = CELLS_END
+    const val CLICK_AT = 0.80f
 
     /** Stay black this long after the effect if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L
     const val FADE_MS = 200L
 
+    /** Opening: give up if One UI has not switched to the main screen this long after arming. */
+    const val ARM_TIMEOUT_MS = 700L
+
+    /** Opening: longest wait for the main screen to report it has lit before revealing anyway. */
+    const val PANEL_WAIT_MS = 400L
+
     /**
      * Normal window opacity. Android 12+ blocks touches through another app's
-     * window above 80%, so the window only goes fully opaque while the effect
-     * is on screen mid-fold, and always drops back afterwards.
+     * window above 80%, so the window only goes fully opaque while an effect
+     * is on screen, and always drops back afterwards.
      */
     const val IDLE_WINDOW_ALPHA = 0.8f
 
-    /** Direction of the wave across the inner screen. Changed to left to right on 13 Oct 2026. */
+    /** Direction of motion across the main screen. Left to right since 13 Oct 2026. */
     const val LEFT_TO_RIGHT = true
 
     /** Anything still playing after this long is stuck and gets reset. */
