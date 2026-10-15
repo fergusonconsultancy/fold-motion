@@ -50,6 +50,13 @@ object MotionConfig {
     /** Opening: give up if One UI has not switched to the main screen this long after arming. */
     const val ARM_TIMEOUT_MS = 700L
 
+    /**
+     * Opening: if One UI switches to the main screen before the hinge sensor has
+     * reported the opening, cover and reveal anyway. The screen may show for a
+     * frame or two before the cover lands; set false to skip the effect instead.
+     */
+    const val CATCH_UP_REVEAL = true
+
     /** Opening: the covering window is at least this many pixels square, larger than either panel. */
     const val OVERSIZE_MIN_PX = 2800
 

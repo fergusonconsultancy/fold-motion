@@ -145,7 +145,7 @@ class FoldMotionService : Service(), SensorEventListener {
                         saveRun((elapsed() / playMs * 100f).roundToInt().coerceIn(0, 99))
                     }
                 }
-            } else if (isInteractive() && phase != Phase.ARMED) {
+            } else if (isInteractive() && phase != Phase.ARMED && !catchUpDue()) {
                 // Opened without a reveal: a low settle as the inner screen arrives
                 haptics.settle()
             }
@@ -156,6 +156,18 @@ class FoldMotionService : Service(), SensorEventListener {
             if (inner && phase == Phase.ARMED) {
                 // Reveal straight away; no waiting on the panel, which stalled on 14 Oct
                 switchedAt = now
+                startReveal()
+                return
+            }
+            if (inner && catchUpDue()) {
+                // One UI switched before the hinge sensor reported the opening (seen on
+                // 15 Oct: the switch arrived first, the 0 to 90 degree step after it).
+                // Cover and reveal now rather than skip the effect.
+                EventLog.add(this@FoldMotionService, "Switch came before the hinge reported opening: catch-up reveal")
+                switchedAt = now
+                overlay?.mode = FoldOverlayView.Mode.OPEN
+                overlay?.show(1f)
+                enter(Phase.ARMED)
                 startReveal()
                 return
             }
@@ -424,6 +436,11 @@ class FoldMotionService : Service(), SensorEventListener {
     // region Animation
 
     /** Developer options > Animator duration scale. 0 means animations off. */
+    /** Opening noticed by the switch alone: phone last seen closed, nothing playing, animations on. */
+    private fun catchUpDue(): Boolean =
+        MotionConfig.CATCH_UP_REVEAL && phase == Phase.IDLE && lastAngle in 0f..1f &&
+            isInteractive() && animScale() > 0f
+
     private fun animScale(): Float = runCatching {
         Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
     }.getOrDefault(1f)
