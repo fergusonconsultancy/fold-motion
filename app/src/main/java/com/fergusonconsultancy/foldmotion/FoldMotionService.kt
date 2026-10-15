@@ -287,13 +287,30 @@ class FoldMotionService : Service(), SensorEventListener {
         if (!::params.isInitialized) return
         val alpha = if (active) 1f else MotionConfig.IDLE_WINDOW_ALPHA
         val hz = if (active) display?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 0f else 0f
-        val size = if (active) WindowManager.LayoutParams.MATCH_PARENT else IDLE_SIZE
+        // Opening uses a fixed square larger than either panel, so the window is not
+        // resized when One UI switches screens. A resize means a new, empty buffer
+        // until the next frame is drawn, which is when content could show through.
+        val size = when {
+            !active -> IDLE_SIZE
+            overlay?.mode == FoldOverlayView.Mode.OPEN -> oversize()
+            else -> WindowManager.LayoutParams.MATCH_PARENT
+        }
         if (params.alpha == alpha && params.preferredRefreshRate == hz && params.width == size) return
         params.alpha = alpha
         params.preferredRefreshRate = hz
         params.width = size
         params.height = size
         runCatching { windowManager.updateViewLayout(view, params) }
+    }
+
+    /** The longest side of any panel this display can show, so one window covers both screens. */
+    private fun oversize(): Int {
+        val modes = display?.supportedModes?.maxOfOrNull { maxOf(it.physicalWidth, it.physicalHeight) } ?: 0
+        val now = runCatching {
+            val b = windowManager.maximumWindowMetrics.bounds
+            maxOf(b.width(), b.height())
+        }.getOrDefault(0)
+        return maxOf(modes, now, MotionConfig.OVERSIZE_MIN_PX)
     }
 
     // endregion
@@ -443,10 +460,12 @@ class FoldMotionService : Service(), SensorEventListener {
         if (isInteractive()) haptics.settle()
         Status.mark(this, Status.PLAYED)
         enter(Phase.REVEALING)
-        // Re-apply the window and ask for a frame now, in case the switch dropped the pending one
-        overlay?.let { v ->
-            runCatching { windowManager.updateViewLayout(v, params) }
-            v.show(1f)
+        // Ask for a frame now, in case the switch dropped the pending one
+        overlay?.show(1f)
+        // Draw the reveal against the main screen's real size, not the oversized window
+        runCatching {
+            val b = windowManager.currentWindowMetrics.bounds
+            overlay?.setContentSize(b.width(), b.height())
         }
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         Choreographer.getInstance().postFrameCallback(frameCallback)

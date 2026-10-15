@@ -111,6 +111,18 @@ class FoldOverlayView(context: Context) : View(context) {
     fun clearAll() {
         p = 0f
         alphaAll = 0f
+        contentW = 0
+        contentH = 0
+        invalidate()
+    }
+
+    // The screen's real size when the window is deliberately larger than it (opening)
+    private var contentW = 0
+    private var contentH = 0
+
+    fun setContentSize(w: Int, h: Int) {
+        contentW = w
+        contentH = h
         invalidate()
     }
 
@@ -123,8 +135,13 @@ class FoldOverlayView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         if (alphaAll <= 0.001f || p <= 0f) return
         drawCount++
-        val w = width.toFloat()
-        val h = height.toFloat()
+        // Opening: until the main screen's size is known, the whole oversized window is black
+        if (mode == Mode.OPEN && (contentW <= 0 || p >= 0.999f)) {
+            canvas.drawColor(Color.BLACK)
+            if (contentW <= 0) return
+        }
+        val w = (if (mode == Mode.OPEN && contentW > 0) contentW else width).toFloat()
+        val h = (if (mode == Mode.OPEN && contentH > 0) contentH else height).toFloat()
         val layer = if (alphaAll < 1f) canvas.saveLayerAlpha(0f, 0f, w, h, (255 * alphaAll).toInt()) else -1
 
         // Drawn with the leading edge on the right; mirrored so it moves left to right
