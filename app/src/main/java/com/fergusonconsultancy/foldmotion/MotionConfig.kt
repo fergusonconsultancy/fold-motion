@@ -1,7 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * 15 Oct 2026: closing Crease Split, opening De Stijl One Plane (reveal), finish "visconti", effectMs 900.
+ * 15 Oct 2026: Crease Split closing and opening, finish "visconti", effectMs 900.
  * Earlier, 14 Oct 2026:
  *   closingEffect "composition" (De Stijl, One Plane), openingEffect "creasesplit",
  *   finish "visconti", effectMs 900, revealMs 400 (lengthened to 650 on 14 Oct after testing), previewed at 1x
@@ -23,10 +23,10 @@ object MotionConfig {
     val CLOSING_EFFECT = ClosingEffect.CREASE_SPLIT
 
     /**
-     * Opening effect. De Stijl, One Plane since 15 Oct 2026, played backwards as
-     * a reveal: the dusk lifts, the plane withdraws, then the rules retract.
+     * Opening effect. Crease Split reveal (back from De Stijl on 15 Oct 2026:
+     * played backwards, the grid read as things leaving, which underwhelmed).
      */
-    val OPENING_EFFECT = ClosingEffect.ONE_PLANE
+    val OPENING_EFFECT = ClosingEffect.CREASE_SPLIT
 
     /** Closing effect length before Animator duration scale. */
     const val EFFECT_MS = 900L
