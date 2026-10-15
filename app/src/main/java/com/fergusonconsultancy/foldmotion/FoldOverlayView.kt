@@ -185,12 +185,10 @@ class FoldOverlayView(context: Context) : View(context) {
         val flip = canvas.save()
         if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
 
-        if (mode == Mode.CLOSE && MotionConfig.CLOSING_EFFECT == MotionConfig.ClosingEffect.ONE_PLANE) {
-            drawOnePlane(canvas, w, h)
-        } else {
-            // Closing runs Crease Split forwards: panels close, the crease flashes, black
-            drawCreaseSplit(canvas, w, h)
-        }
+        // Each effect is drawn on progress p (0 clear, 1 black): closing runs it forwards,
+        // the opening reveal runs it backwards
+        val effect = if (mode == Mode.CLOSE) MotionConfig.CLOSING_EFFECT else MotionConfig.OPENING_EFFECT
+        if (effect == MotionConfig.ClosingEffect.ONE_PLANE) drawOnePlane(canvas, w, h) else drawCreaseSplit(canvas, w, h)
 
         canvas.restoreToCount(flip)
         if (layer >= 0) canvas.restoreToCount(layer)
@@ -245,12 +243,12 @@ class FoldOverlayView(context: Context) : View(context) {
         }
 
         // Rules sit above the plane: each casts a short shadow, then the rule itself
-        val half = ruleW / 2f
+        val half = max(4f, w * 0.014f) / 2f
         val drop = max(3f, w * 0.012f)
         for (i in vRules.indices) {
             val q = FoldMath.glide(FoldMath.clamp((p - (vRules.size - 1 - i) * 0.04f) / 0.16f))
             if (q <= 0f) continue
-            val x = xs[i]
+            val x = vRules[i] * w
             val bottom = h * q
             shade(canvas, x - half, -drop, 0f, bottom, 0.5f)
             canvas.drawRect(x - half, 0f, x + half, bottom, rulePaint)
@@ -262,7 +260,7 @@ class FoldOverlayView(context: Context) : View(context) {
         for (j in hRules.indices) {
             val q = FoldMath.glide(FoldMath.clamp((p - 0.06f - j * 0.04f) / 0.18f))
             if (q <= 0f) continue
-            val y = ys[j]
+            val y = hRules[j] * h
             val start = w - w * q
             shadeDown(canvas, start, w, y + half, drop, 0.5f)
             canvas.drawRect(start, y - half, w, y + half, rulePaint)
