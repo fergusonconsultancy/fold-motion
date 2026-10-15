@@ -185,7 +185,12 @@ class FoldOverlayView(context: Context) : View(context) {
         val flip = canvas.save()
         if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
 
-        if (mode == Mode.CLOSE) drawOnePlane(canvas, w, h) else drawCreaseSplit(canvas, w, h)
+        if (mode == Mode.CLOSE && MotionConfig.CLOSING_EFFECT == MotionConfig.ClosingEffect.ONE_PLANE) {
+            drawOnePlane(canvas, w, h)
+        } else {
+            // Closing runs Crease Split forwards: panels close, the crease flashes, black
+            drawCreaseSplit(canvas, w, h)
+        }
 
         canvas.restoreToCount(flip)
         if (layer >= 0) canvas.restoreToCount(layer)

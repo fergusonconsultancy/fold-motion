@@ -1,7 +1,8 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * Chosen in Fold Motion Studio on 14 Oct 2026:
+ * 15 Oct 2026: closingEffect "creasesplit", openingEffect "creasesplit", finish "visconti", effectMs 900.
+ * Earlier, 14 Oct 2026:
  *   closingEffect "composition" (De Stijl, One Plane), openingEffect "creasesplit",
  *   finish "visconti", effectMs 900, revealMs 400 (lengthened to 650 on 14 Oct after testing), previewed at 1x
  *
@@ -13,6 +14,14 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
+    enum class ClosingEffect { ONE_PLANE, CREASE_SPLIT }
+
+    /**
+     * Closing effect. Crease Split since 15 Oct 2026: the same panels as the
+     * opening, run forwards, so the two directions are one object.
+     */
+    val CLOSING_EFFECT = ClosingEffect.CREASE_SPLIT
+
     /** Closing effect length before Animator duration scale. */
     const val EFFECT_MS = 900L
 
@@ -24,7 +33,7 @@ object MotionConfig {
     const val PLANE_SPAN = 0.60f
     const val DUSK_START = 0.80f
 
-    /** Haptic moments: a soft tick as the first rule draws, a crisp click as the plane lands. */
+    /** Haptic moments: a soft tick as the motion starts, a crisp click on the crease flash (Crease Split) or as the plane lands (One Plane). */
     const val TICK_AT = 0.03f
     const val CLICK_AT = 0.80f
 
