@@ -51,4 +51,5 @@ dependencies {
     // Fold posture (flat / half-opened): an earlier, finer closing signal than the hinge sensor
     implementation("androidx.window:window:1.3.0")
     implementation("androidx.window:window-java:1.3.0")
+    implementation("androidx.core:core:1.13.1")
 }
