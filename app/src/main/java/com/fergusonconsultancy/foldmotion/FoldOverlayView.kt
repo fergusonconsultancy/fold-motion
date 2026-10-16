@@ -130,10 +130,23 @@ class FoldOverlayView(context: Context) : View(context) {
 
     // ---- Lacquer Panel: deep paint, dark at the outer edge, lit at the leading lip
     private val lacquerPanelShader = unitH(
-        intArrayOf(Color.rgb(0, 18, 11), Color.rgb(2, 84, 44), Color.rgb(14, 132, 70), Color.rgb(150, 235, 185)),
-        floatArrayOf(0f, 0.6f, 0.97f, 1f)
+        intArrayOf(
+            Color.rgb(0, 18, 11), Color.rgb(2, 84, 44), Color.rgb(10, 112, 60),
+            Color.rgb(150, 132, 92), Color.rgb(228, 214, 184), Color.rgb(255, 247, 228)
+        ),
+        // Visconti body, turning to a champagne-gold lip at the leading edge
+        floatArrayOf(0f, 0.6f, 0.88f, 0.935f, 0.975f, 1f)
     )
     private val lacquerPanelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = lacquerPanelShader }
+    // Champagne clear-coat reflection for the Lacquer Panel
+    private val champagneGlossShader = unitH(
+        intArrayOf(
+            Color.argb(0, 240, 226, 196), Color.argb(56, 240, 226, 196), Color.argb(199, 255, 246, 226),
+            Color.argb(56, 240, 226, 196), Color.argb(0, 240, 226, 196)
+        ),
+        floatArrayOf(0f, 0.35f, 0.5f, 0.65f, 1f)
+    )
+    private val champagneGlossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = champagneGlossShader }
 
     // ---- Arch Aperture
     private val archPath = Path()
@@ -386,15 +399,15 @@ class FoldOverlayView(context: Context) : View(context) {
             val gw = w * 0.22f
             val gx = w - sw * (w + gw * 1.5f) + gw * 0.25f
             m.setScale(gw, 1f); m.postTranslate(gx, 0f)
-            glossShader.setLocalMatrix(m)
-            glossPaint.alpha = (255 * gA).toInt()
+            champagneGlossShader.setLocalMatrix(m)
+            champagneGlossPaint.alpha = (255 * gA).toInt()
             for (side in 0..1) {
                 val l = if (side == 0) xa else 0f
                 val rr = if (side == 0) w + 1f else xb
                 val x0 = max(l, gx)
                 val x1 = min(rr, gx + gw)
                 if (x1 <= x0) continue
-                canvas.drawRect(x0, 0f, x1, h, glossPaint)
+                canvas.drawRect(x0, 0f, x1, h, champagneGlossPaint)
                 flakePaint.alpha = (255 * 0.6f * gA).toInt()
                 val f0 = max(l, gx + gw * 0.3f)
                 val f1 = min(rr, gx + gw * 0.7f)
