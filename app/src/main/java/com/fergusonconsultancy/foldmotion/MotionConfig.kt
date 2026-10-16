@@ -1,7 +1,8 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * 15 Oct 2026: Crease Split closing and opening, finish "visconti", effectMs 900.
+ * 16 Oct 2026: closingEffect "ruled", openingEffect "nave", finish "visconti", effectMs 900, revealMs 650.
+ * 15 Oct 2026: Crease Split closing and opening.
  * Earlier, 14 Oct 2026:
  *   closingEffect "composition" (De Stijl, One Plane), openingEffect "creasesplit",
  *   finish "visconti", effectMs 900, revealMs 400 (lengthened to 650 on 14 Oct after testing), previewed at 1x
@@ -14,19 +15,19 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class ClosingEffect { ONE_PLANE, CREASE_SPLIT }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT }
 
     /**
-     * Closing effect. Crease Split since 15 Oct 2026: the same panels as the
-     * opening, run forwards, so the two directions are one object.
+     * Closing effect. Ruled Surface since 16 Oct 2026 (Gaudí): straight threads
+     * twist into a hyperbolic curve, collapse onto the crease, which flashes.
      */
-    val CLOSING_EFFECT = ClosingEffect.CREASE_SPLIT
+    val CLOSING_EFFECT = Effect.RULED_SURFACE
 
     /**
-     * Opening effect. Crease Split reveal (back from De Stijl on 15 Oct 2026:
-     * played backwards, the grid read as things leaving, which underwhelmed).
+     * Opening effect. Nave of Light since 16 Oct 2026 (Gaudí): built for opening,
+     * not a closing effect reversed. The crease ignites and light branches out.
      */
-    val OPENING_EFFECT = ClosingEffect.CREASE_SPLIT
+    val OPENING_EFFECT = Effect.NAVE_OF_LIGHT
 
     /** Closing effect length before Animator duration scale. */
     const val EFFECT_MS = 900L
@@ -41,7 +42,7 @@ object MotionConfig {
 
     /** Haptic moments: a soft tick as the motion starts, a crisp click on the crease flash (Crease Split) or as the plane lands (One Plane). */
     const val TICK_AT = 0.03f
-    const val CLICK_AT = 0.80f
+    const val CLICK_AT = 0.74f
 
     /** Stay black this long after the effect if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L

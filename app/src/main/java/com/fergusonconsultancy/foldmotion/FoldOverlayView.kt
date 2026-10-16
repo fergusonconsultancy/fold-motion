@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.view.View
 import kotlin.math.abs
@@ -125,6 +126,63 @@ class FoldOverlayView(context: Context) : View(context) {
     private val panelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = panelShader }
     private val shadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = shadeShader }
     private val shadeVPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = shadeVShader }
+
+    // ---- Gaudí pieces
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private fun unitRadial(rgb: Int) = RadialGradient(
+        0f, 0f, 1f,
+        intArrayOf(Color.argb(255, Color.red(rgb), Color.green(rgb), Color.blue(rgb)), Color.argb(0, Color.red(rgb), Color.green(rgb), Color.blue(rgb))),
+        floatArrayOf(0f, 1f), Shader.TileMode.CLAMP
+    )
+    private val waistShader = unitRadial(Color.rgb(200, 255, 220))
+    private val tipShader = unitRadial(Color.rgb(255, 226, 170))
+    private val waistPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = waistShader }
+    private val tipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = tipShader }
+
+    // Ruled Surface: 44 threads; colour by how far each faces the viewer
+    private val threads = 44
+    private val threadColor = IntArray(threads) { i ->
+        val th = Math.PI * (i + 0.5) / threads
+        val lit = 0.35f + 0.65f * kotlin.math.sin(th).toFloat()
+        Color.rgb((6 + (70 - 6) * lit).toInt(), (80 + (200 - 80) * lit).toInt(), (44 + (120 - 44) * lit).toInt())
+    }
+    private val threadFront = FloatArray(threads) { i -> kotlin.math.sin(Math.PI * (i + 0.5) / threads).toFloat() }
+    private val threadTheta = FloatArray(threads) { i -> (Math.PI * (i + 0.5) / threads).toFloat() }
+
+    // Nave of Light: ordered branching, grown once with a fixed seed (matches Studio).
+    // Offsets are in half-widths from each limb's root on the crease; fy is the root's height fraction.
+    private val nFy = ArrayList<Float>(); private val nX1 = ArrayList<Float>(); private val nY1 = ArrayList<Float>()
+    private val nX2 = ArrayList<Float>(); private val nY2 = ArrayList<Float>(); private val nDepth = ArrayList<Int>()
+    private val nT0 = ArrayList<Float>(); private val nT1 = ArrayList<Float>()
+    private var seed = 11L
+    private fun rnd(): Double { seed = (seed * 16807L) % 2147483647L; return seed / 2147483647.0 }
+    private fun grow(fy: Float, x: Double, y: Double, ang: Double, len: Double, depth: Int, t0: Double) {
+        val x2 = x + kotlin.math.cos(ang) * len
+        val y2 = y + kotlin.math.sin(ang) * len
+        val dur = 0.15
+        nFy.add(fy); nX1.add(x.toFloat()); nY1.add(y.toFloat()); nX2.add(x2.toFloat()); nY2.add(y2.toFloat())
+        nDepth.add(depth); nT0.add(t0.toFloat()); nT1.add((t0 + dur).toFloat())
+        if (depth >= 3) return
+        val spread = 0.42
+        val l = len * (0.7 + rnd() * 0.06)
+        grow(fy, x2, y2, ang - spread, l, depth + 1, t0 + dur * 0.85)
+        grow(fy, x2, y2, ang + spread, l, depth + 1, t0 + dur * 0.85)
+    }
+    init {
+        for (fy in floatArrayOf(0.2f, 0.5f, 0.8f)) {
+            val lean = (fy - 0.5) * 1.2
+            val t0 = 0.1 + kotlin.math.abs(fy - 0.5) * 0.15
+            grow(fy, 0.0, 0.0, -lean, 0.36, 0, t0)
+            grow(fy, 0.0, 0.0, Math.PI + lean, 0.36, 0, t0)
+        }
+    }
+    private val depthColor = IntArray(4) { d ->
+        val t = d / 3f
+        Color.rgb((60 + (244 - 60) * t).toInt(), (210 + (184 - 210) * t).toInt(), (120 + (92 - 120) * t).toInt())
+    }
     private val glossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glossShader }
     private val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = haloShader }
     private val lacquerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = lacquerShader }
@@ -188,7 +246,12 @@ class FoldOverlayView(context: Context) : View(context) {
         // Each effect is drawn on progress p (0 clear, 1 black): closing runs it forwards,
         // the opening reveal runs it backwards
         val effect = if (mode == Mode.CLOSE) MotionConfig.CLOSING_EFFECT else MotionConfig.OPENING_EFFECT
-        if (effect == MotionConfig.ClosingEffect.ONE_PLANE) drawOnePlane(canvas, w, h) else drawCreaseSplit(canvas, w, h)
+        when (effect) {
+            MotionConfig.Effect.ONE_PLANE -> drawOnePlane(canvas, w, h)
+            MotionConfig.Effect.CREASE_SPLIT -> drawCreaseSplit(canvas, w, h)
+            MotionConfig.Effect.RULED_SURFACE -> drawRuledSurface(canvas, w, h)
+            MotionConfig.Effect.NAVE_OF_LIGHT -> drawNaveOfLight(canvas, w, h)
+        }
 
         canvas.restoreToCount(flip)
         if (layer >= 0) canvas.restoreToCount(layer)
@@ -276,6 +339,120 @@ class FoldOverlayView(context: Context) : View(context) {
             m.setScale(feather, 1f); m.postTranslate(f, 0f)
             duskShader.setLocalMatrix(m)
             canvas.drawRect(max(0f, f), 0f, w + 1f, h, duskPaint)
+        }
+    }
+
+    // endregion
+
+    // region Gaudí: Ruled Surface (closing)
+
+    /** Straight threads twist into a hyperbolic curve, collapse onto the crease, which flashes; then black. */
+    private fun drawRuledSurface(canvas: Canvas, w: Float, h: Float) {
+        val cx = w / 2f
+        val show = FoldMath.smooth(FoldMath.clamp(p / 0.15f))
+        val twist = FoldMath.glide(FoldMath.clamp((p - 0.05f) / 0.55f)) * Math.PI.toFloat()
+        val r = (w / 2f) * (1f - FoldMath.glide(FoldMath.clamp((p - 0.45f) / 0.3f)))
+        val under = 0.9f * FoldMath.smooth(FoldMath.clamp(p / 0.55f))
+        if (under > 0f) { blackPaint.alpha = (255 * under).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint) }
+        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.74f) / 0.1f))
+        val a = show * fade
+        if (a > 0.004f) {
+            strokePaint.strokeWidth = max(1.2f, w * 0.0028f)
+            for (i in 0 until threads) {
+                val th = threadTheta[i]
+                val xt = cx + r * kotlin.math.cos(th)
+                val xb = cx + r * kotlin.math.cos(th + twist)
+                strokePaint.color = threadColor[i]
+                strokePaint.alpha = (255 * a * (0.35f + 0.65f * threadFront[i])).toInt()
+                canvas.drawLine(xt, 0f, xb, h, strokePaint)
+            }
+            // The waist of the curve catches the light
+            if (twist > 0.4f) {
+                val wy = h / 2f
+                val rad = max(8f, abs(r * kotlin.math.cos(twist / 2f)) + w * 0.06f)
+                m.setScale(rad, rad); m.postTranslate(cx, wy)
+                waistShader.setLocalMatrix(m)
+                waistPaint.alpha = (255 * 0.25f * a).toInt()
+                canvas.drawRect(cx - rad, wy - rad, cx + rad, wy + rad, waistPaint)
+            }
+        }
+        flashOnCrease(canvas, cx, w, h, FoldMath.smooth(FoldMath.clamp((p - 0.66f) / 0.08f)) *
+            (1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.12f))))
+        val end = FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.15f))
+        if (end > 0f) { blackPaint.alpha = (255 * end).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint) }
+    }
+
+    private fun flashOnCrease(canvas: Canvas, cx: Float, w: Float, h: Float, fl: Float) {
+        if (fl <= 0f) return
+        greenBand(canvas, cx, 0f, h, w * 0.3f, 0.5f * fl, 0f, w + 1f)
+        band(canvas, cx, 0f, h, w * 0.05f, 0.75f * fl)
+        seamPaint.alpha = (255 * fl).toInt()
+        canvas.drawRect(cx - 1.5f, 0f, cx + 1.5f, h, seamPaint)
+    }
+
+    // endregion
+
+    // region Gaudí: Nave of Light (opening reveal)
+
+    /**
+     * Runs on reveal progress r = 1 - p. Black; the crease ignites from the middle;
+     * ribs of light branch outwards, green at the hinge warming to amber; the
+     * darkness lifts outwards behind them; the ribs fade and leave the screen clean.
+     */
+    private fun drawNaveOfLight(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
+        val cx = w / 2f
+        val hw = w / 2f
+        // Darkness lifts outwards from the crease, feathered at its edge
+        val spread = FoldMath.glide(FoldMath.clamp((r - 0.22f) / 0.6f)) * (hw + w * 0.25f)
+        val feather = w * 0.25f
+        blackPaint.alpha = 255
+        if (spread <= 0f) {
+            canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
+        } else {
+            val l = cx - spread
+            val rr = cx + spread
+            if (l > 0f) canvas.drawRect(0f, 0f, l, h, blackPaint)
+            if (rr < w) canvas.drawRect(rr, 0f, w + 1f, h, blackPaint)
+            shade(canvas, l, feather, 0f, h, 1f)
+            shade(canvas, rr, -feather, 0f, h, 1f)
+        }
+        // The crease ignites, growing from the middle up and down
+        val ig = FoldMath.glide(FoldMath.clamp((r - 0.02f) / 0.12f))
+        val glow = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.5f) / 0.35f))
+        if (ig > 0f && glow > 0f) {
+            val top = h / 2f * (1f - ig)
+            val bot = h / 2f * (1f + ig)
+            greenBand(canvas, cx, top, bot, w * 0.2f, 0.45f * glow, 0f, w + 1f)
+            seamPaint.alpha = (255 * 0.95f * glow).toInt()
+            canvas.drawRect(cx - 1.5f, top, cx + 1.5f, bot, seamPaint)
+        }
+        // Ribs: each drawn partially by its own timing, a soft glow under a fine line
+        val bf = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.62f) / 0.3f))
+        if (bf <= 0f) return
+        for (i in nFy.indices) {
+            val k = FoldMath.clamp((r - nT0[i]) / (nT1[i] - nT0[i]))
+            if (k <= 0f) continue
+            val x1 = cx + nX1[i] * hw
+            val y1 = nFy[i] * h + nY1[i] * hw
+            val xe = x1 + (cx + nX2[i] * hw - x1) * k
+            val ye = y1 + (nFy[i] * h + nY2[i] * hw - y1) * k
+            val d = nDepth[i]
+            val lw = max(1f, w * 0.007f * (1f - d * 0.22f))
+            strokePaint.color = depthColor[d]
+            strokePaint.strokeWidth = lw * 4f
+            strokePaint.alpha = (255 * 0.22f * bf).toInt()
+            canvas.drawLine(x1, y1, xe, ye, strokePaint)
+            strokePaint.strokeWidth = lw
+            strokePaint.alpha = (255 * 0.95f * bf).toInt()
+            canvas.drawLine(x1, y1, xe, ye, strokePaint)
+            if (d == 3 && k < 1f) {
+                val rad = w * 0.02f
+                m.setScale(rad, rad); m.postTranslate(xe, ye)
+                tipShader.setLocalMatrix(m)
+                tipPaint.alpha = (255 * 0.8f * bf).toInt()
+                canvas.drawRect(xe - rad, ye - rad, xe + rad, ye + rad, tipPaint)
+            }
         }
     }
 
