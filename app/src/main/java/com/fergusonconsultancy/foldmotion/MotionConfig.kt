@@ -1,7 +1,8 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * 16 Oct 2026 (night, final): closingEffect "aperture", openingEffect "hingeshade", finish "visconti", effectMs 900, revealMs 650.
+ * 16 Oct 2026 (late): opening Signature (champagne seam, lacquer flood, reflection, parting); Hinge Shade rejected.
+ * 16 Oct 2026 (night): closingEffect "aperture", openingEffect "hingeshade", finish "visconti", effectMs 900, revealMs 650.
  * 16 Oct 2026 (night): Lacquer Panel closing and opening.
  * 16 Oct 2026 (evening): closing Lacquer Panel, opening Arch Aperture, chosen in Studio.
  * 16 Oct 2026: closing Ruled Surface (Gaudí), opening Crease Split; Nave of Light tried and dropped.
@@ -18,7 +19,7 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE }
 
     /**
      * Closing effect. Arch Aperture since 16 Oct 2026 (night), chosen in Studio: the
@@ -27,11 +28,11 @@ object MotionConfig {
     val CLOSING_EFFECT = Effect.ARCH_APERTURE
 
     /**
-     * Opening effect. Hinge Shade since 16 Oct 2026 (night), chosen in Studio: the
-     * folding half swings out of shade into the light, the crease glowing as it passes.
-     * Lacquer Panel, Arch Aperture, Crease Split and Nave of Light were tried before it.
+     * Opening effect. Signature since 16 Oct 2026 (late): built as a premium opening.
+     * Hinge Shade, Lacquer Panel, Arch Aperture, Crease Split and Nave of Light were
+     * tried before it.
      */
-    val OPENING_EFFECT = Effect.HINGE_SHADE
+    val OPENING_EFFECT = Effect.SIGNATURE
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs

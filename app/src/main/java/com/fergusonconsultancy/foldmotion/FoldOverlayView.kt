@@ -292,6 +292,7 @@ class FoldOverlayView(context: Context) : View(context) {
             MotionConfig.Effect.LACQUER_PANEL -> drawLacquerPanel(canvas, w, h)
             MotionConfig.Effect.ARCH_APERTURE -> drawArchAperture(canvas, w, h)
             MotionConfig.Effect.HINGE_SHADE -> drawHingeShade(canvas, w, h)
+            MotionConfig.Effect.SIGNATURE -> drawSignature(canvas, w, h)
         }
 
         canvas.restoreToCount(flip)
@@ -385,6 +386,52 @@ class FoldOverlayView(context: Context) : View(context) {
 
     // endregion
 
+    // region Signature (opening)
+
+    /**
+     * Built as a premium opening on reveal progress r = 1 - p. A champagne seam ignites
+     * on the crease; Visconti lacquer floods outwards from the hinge to the edges, its
+     * flood fronts lit in champagne; a champagne clear-coat reflection sweeps left to
+     * right; then the champagne-edged halves part to show the screen.
+     */
+    private fun drawSignature(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
+        val cx = w / 2f
+        val flood = FoldMath.glide(FoldMath.clamp((r - 0.03f) / 0.2f))
+        val spread = flood * (cx + 2f)
+        if (flood > 0f) {
+            val c = canvas.save()
+            if (flood < 1f) canvas.clipRect(cx - spread, 0f, cx + spread, h)
+            drawLacquerPanel(canvas, w, h, fromBlack = false)
+            canvas.restoreToCount(c)
+        }
+        // Black beyond the flood
+        if (flood < 1f) {
+            blackPaint.alpha = 255
+            canvas.drawRect(0f, 0f, max(0f, cx - spread), h, blackPaint)
+            canvas.drawRect(min(w + 1f, cx + spread), 0f, w + 1f, h, blackPaint)
+            // The flood fronts, lit in champagne
+            val fa = 0.9f * (1f - flood) * FoldMath.smooth(FoldMath.clamp(flood / 0.08f))
+            if (fa > 0.004f) {
+                for (x in floatArrayOf(cx - spread, cx + spread)) {
+                    seamPaint.alpha = (255 * fa).toInt()
+                    canvas.drawRect(x - 1f, 0f, x + 1f, h, seamPaint)
+                    band(canvas, x, 0f, h, w * 0.03f, 0.35f * fa)
+                }
+            }
+        }
+        // The seam ignites on the crease, then gives way to the paint
+        val seam = FoldMath.smooth(FoldMath.clamp(r / 0.05f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.18f) / 0.14f)))
+        if (seam > 0f) {
+            greenBand(canvas, cx, 0f, h, w * 0.25f, 0.4f * seam, 0f, w + 1f)
+            band(canvas, cx, 0f, h, w * 0.06f, 0.8f * seam)
+            seamPaint.alpha = (255 * seam).toInt()
+            canvas.drawRect(cx - 1.5f, 0f, cx + 1.5f, h, seamPaint)
+        }
+    }
+
+    // endregion
+
     // region Hinge Shade
 
     /**
@@ -458,7 +505,7 @@ class FoldOverlayView(context: Context) : View(context) {
      * Visconti paint with flake and lacquer; a clear-coat reflection sweeps left to
      * right; the panel splits at the crease and the halves part. Black at p = 1.
      */
-    private fun drawLacquerPanel(canvas: Canvas, w: Float, h: Float) {
+    private fun drawLacquerPanel(canvas: Canvas, w: Float, h: Float, fromBlack: Boolean = true) {
         val r = 1f - p
         val cx = w / 2f
         val eA = FoldMath.glide(FoldMath.clamp((r - 0.5f) / 0.45f))
@@ -497,7 +544,7 @@ class FoldOverlayView(context: Context) : View(context) {
         shade(canvas, xa, -w * 0.05f, 0f, h, 0.8f * min(1f, eA * 8f) * (1f - eA))
         shade(canvas, xb, w * 0.05f, 0f, h, 0.8f * min(1f, eB * 8f) * (1f - eB))
         // From black
-        val black = 1f - FoldMath.smooth(FoldMath.clamp(r / 0.12f))
+        val black = if (fromBlack) 1f - FoldMath.smooth(FoldMath.clamp(r / 0.12f)) else 0f
         if (black > 0f) { blackPaint.alpha = (255 * black).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint) }
     }
 
