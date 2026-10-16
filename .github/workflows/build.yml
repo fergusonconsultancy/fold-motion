@@ -20,7 +20,14 @@ jobs:
           gradle-version: "8.11.1"
 
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+        shell: bash
+        run: |
+          set +e
+          gradle assembleDebug --no-daemon 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          # Surface compiler and Gradle errors as annotations, readable without the full log
+          grep -E "^e: |What went wrong|^> |Could not|error:" build.log | head -30 | while IFS= read -r line; do echo "::error::${line}"; done
+          exit $status
 
       - uses: actions/upload-artifact@v4
         with:
