@@ -64,6 +64,9 @@ object MotionConfig {
     /** Opening: longest the reveal holds black waiting for the main screen to report it is lit. */
     const val PANEL_WAIT_MAX_MS = 350L
 
+    /** Opening onto the lock screen: how long to wait for an unlock before skipping the reveal. */
+    const val UNLOCK_WAIT_MS = 2500L
+
     /** A closing step this soon after an opening step is the hinge bouncing, not a close. */
     const val BOUNCE_GUARD_MS = 600L
 

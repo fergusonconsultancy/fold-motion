@@ -45,7 +45,7 @@ import kotlin.math.roundToInt
  */
 class FoldMotionService : Service(), SensorEventListener {
 
-    private enum class Phase { IDLE, PLAYING, HOLDING, FADING, ARMED, WAITING_PANEL, REVEALING }
+    private enum class Phase { IDLE, PLAYING, HOLDING, FADING, ARMED, WAITING_PANEL, AWAIT_UNLOCK, REVEALING }
 
     private lateinit var sensorManager: SensorManager
     private var hingeSensor: Sensor? = null
@@ -98,6 +98,13 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
     private var firstRevealFrameLogged = false
+    /** Opening onto the lock screen: give up if it is not unlocked within this window. */
+    private val unlockDeadline = Runnable {
+        if (phase == Phase.AWAIT_UNLOCK) {
+            EventLog.add(this, "Still locked after ${MotionConfig.UNLOCK_WAIT_MS}ms: reveal skipped")
+            finish()
+        }
+    }
     private var lastOpenStepAt = 0L
     /** When the reveal began waiting for the main screen to report it is lit. */
     private var panelWaitFrom = 0L
@@ -126,8 +133,22 @@ class FoldMotionService : Service(), SensorEventListener {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> { stopListening(); EventLog.add(context, "Screen off, paused") }
-                Intent.ACTION_SCREEN_ON -> { startListening(); EventLog.add(context, "Screen on, listening") }
+                // The hinge sensor stays registered while the screen is off: opening a sleeping
+                // phone is exactly when the 0 to 90 degree step matters most. It reports only
+                // on change (three positions), so the cost is negligible.
+                Intent.ACTION_SCREEN_OFF -> {
+                    if (phase != Phase.ARMED && phase != Phase.AWAIT_UNLOCK) finish()
+                    EventLog.add(context, "Screen off (still listening for the hinge)")
+                }
+                Intent.ACTION_SCREEN_ON -> { startListening(); EventLog.add(context, "Screen on") }
+                Intent.ACTION_USER_PRESENT -> {
+                    if (phase == Phase.AWAIT_UNLOCK) {
+                        EventLog.add(context, "Unlocked: reveal starts now")
+                        mainHandler.removeCallbacks(unlockDeadline)
+                        switchedAt = SystemClock.uptimeMillis()
+                        startReveal(afterUnlock = true)
+                    }
+                }
             }
         }
     }
@@ -222,6 +243,7 @@ class FoldMotionService : Service(), SensorEventListener {
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
         })
     }
 
@@ -477,8 +499,22 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
 
-    private fun startReveal() {
+    private fun startReveal(afterUnlock: Boolean = false) {
         mainHandler.removeCallbacks(armDeadline)
+        // The lock screen sits above every app overlay, so a reveal played now would be
+        // hidden behind it. Hold the cover and play the reveal the moment it unlocks.
+        val locked = runCatching {
+            getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
+        }.getOrDefault(false)
+        if (!afterUnlock && locked) {
+            phase = Phase.AWAIT_UNLOCK
+            phaseAt = SystemClock.uptimeMillis()
+            overlay?.show(1f)
+            mainHandler.removeCallbacks(unlockDeadline)
+            mainHandler.postDelayed(unlockDeadline, MotionConfig.UNLOCK_WAIT_MS)
+            EventLog.add(this, "Opened onto the lock screen: reveal waits for unlock")
+            return
+        }
         revealMs = MotionConfig.REVEAL_MS * animScale().coerceAtLeast(0.01f)
         stats.reset()
         overlay?.drawCount = 0
@@ -554,7 +590,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 view.show(1f)
                 if (t > MotionConfig.HOLD_TIMEOUT_MS * scale) { fadeFrom = 1f; enter(Phase.FADING) }
             }
-            Phase.ARMED, Phase.WAITING_PANEL -> {
+            Phase.ARMED, Phase.WAITING_PANEL, Phase.AWAIT_UNLOCK -> {
                 // Cover held black until One UI switches; armDeadline clears it if it never does
                 view.show(1f)
             }
@@ -609,6 +645,7 @@ class FoldMotionService : Service(), SensorEventListener {
         mainHandler.removeCallbacks(frameCheck)
         mainHandler.removeCallbacks(revealDeadline)
         mainHandler.removeCallbacks(armDeadline)
+        mainHandler.removeCallbacks(unlockDeadline)
         overlay?.clearAll()
         setActiveWindow(false)
     }
