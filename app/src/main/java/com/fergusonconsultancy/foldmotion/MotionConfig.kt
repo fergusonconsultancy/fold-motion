@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 16 Oct 2026 (night): Lacquer Panel closing and opening.
  * 16 Oct 2026 (evening): closing Lacquer Panel, opening Arch Aperture, chosen in Studio.
  * 16 Oct 2026: closing Ruled Surface (Gaudí), opening Crease Split; Nave of Light tried and dropped.
  * 15 Oct 2026: Crease Split closing and opening.
@@ -26,11 +27,11 @@ object MotionConfig {
     val CLOSING_EFFECT = Effect.LACQUER_PANEL
 
     /**
-     * Opening effect. Arch Aperture since 16 Oct 2026 (evening): the crease ignites
-     * and flashes, then opens into a parabolic arch with a lit rim. Crease Split
-     * before that; Nave of Light was tried and dropped.
+     * Opening effect. Lacquer Panel since 16 Oct 2026 (night): the same paint as the
+     * closing, run as a reveal. Arch Aperture, Crease Split and Nave of Light were
+     * tried before it.
      */
-    val OPENING_EFFECT = Effect.ARCH_APERTURE
+    val OPENING_EFFECT = Effect.LACQUER_PANEL
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
