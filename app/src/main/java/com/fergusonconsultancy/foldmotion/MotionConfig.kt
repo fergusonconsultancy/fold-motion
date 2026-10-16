@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 16 Oct 2026 (night, final): closingEffect "aperture", openingEffect "hingeshade", finish "visconti", effectMs 900, revealMs 650.
  * 16 Oct 2026 (night): Lacquer Panel closing and opening.
  * 16 Oct 2026 (evening): closing Lacquer Panel, opening Arch Aperture, chosen in Studio.
  * 16 Oct 2026: closing Ruled Surface (Gaudí), opening Crease Split; Nave of Light tried and dropped.
@@ -17,21 +18,20 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE }
 
     /**
-     * Closing effect. Lacquer Panel since 16 Oct 2026 (evening): two halves of Visconti
-     * paint close onto the crease, a clear-coat reflection sweeps left to right, then
-     * black. Ruled Surface (Gaudí) before that.
+     * Closing effect. Arch Aperture since 16 Oct 2026 (night), chosen in Studio: the
+     * arch closes in towards the crease with its lit rim, the crease flashes, then black.
      */
-    val CLOSING_EFFECT = Effect.LACQUER_PANEL
+    val CLOSING_EFFECT = Effect.ARCH_APERTURE
 
     /**
-     * Opening effect. Lacquer Panel since 16 Oct 2026 (night): the same paint as the
-     * closing, run as a reveal. Arch Aperture, Crease Split and Nave of Light were
-     * tried before it.
+     * Opening effect. Hinge Shade since 16 Oct 2026 (night), chosen in Studio: the
+     * folding half swings out of shade into the light, the crease glowing as it passes.
+     * Lacquer Panel, Arch Aperture, Crease Split and Nave of Light were tried before it.
      */
-    val OPENING_EFFECT = Effect.LACQUER_PANEL
+    val OPENING_EFFECT = Effect.HINGE_SHADE
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
@@ -53,7 +53,7 @@ object MotionConfig {
 
     /** Haptic moments: a soft tick as the motion starts, a crisp click on the crease flash (Crease Split) or as the plane lands (One Plane). */
     const val TICK_AT = 0.03f
-    const val CLICK_AT = 0.5f
+    const val CLICK_AT = 0.7f
 
     /** Stay black this long after the effect if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L

@@ -148,6 +148,18 @@ class FoldOverlayView(context: Context) : View(context) {
     )
     private val champagneGlossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = champagneGlossShader }
 
+    // ---- Hinge Shade
+    private val hingeFarShader = unitH(intArrayOf(Color.argb(235, 4, 18, 11), Color.BLACK), floatArrayOf(0f, 1f))
+    private val hingeFarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = hingeFarShader }
+    private val hingeFaceShader = unitH(intArrayOf(Color.argb(38, 0, 0, 0), Color.argb(217, 0, 0, 0)), floatArrayOf(0f, 1f))
+    private val hingeFacePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = hingeFaceShader }
+    private val hingeTintPaint = Paint().apply { color = Color.rgb(12, 46, 30) }
+    private val specShader = unitH(
+        intArrayOf(Color.argb(0, 180, 220, 170), Color.rgb(180, 220, 170), Color.argb(0, 180, 220, 170)),
+        floatArrayOf(0f, 0.5f, 1f)
+    )
+    private val specPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = specShader }
+
     // ---- Arch Aperture
     private val archPath = Path()
     private val maskPath = Path().apply { fillType = Path.FillType.EVEN_ODD }
@@ -279,6 +291,7 @@ class FoldOverlayView(context: Context) : View(context) {
             MotionConfig.Effect.NAVE_OF_LIGHT -> drawNaveOfLight(canvas, w, h)
             MotionConfig.Effect.LACQUER_PANEL -> drawLacquerPanel(canvas, w, h)
             MotionConfig.Effect.ARCH_APERTURE -> drawArchAperture(canvas, w, h)
+            MotionConfig.Effect.HINGE_SHADE -> drawHingeShade(canvas, w, h)
         }
 
         canvas.restoreToCount(flip)
@@ -368,6 +381,72 @@ class FoldOverlayView(context: Context) : View(context) {
             duskShader.setLocalMatrix(m)
             canvas.drawRect(max(0f, f), 0f, w + 1f, h, duskPaint)
         }
+    }
+
+    // endregion
+
+    // region Hinge Shade
+
+    /**
+     * Ported from Fold Motion Studio. On p (0 clear, 1 black): the folding half turns
+     * away from the light, foreshortening towards the crease and deepening in shade while
+     * the crease glows; then the static half settles to dark. As an opening it runs
+     * backwards: the static half lifts first, then the folding half swings out flat.
+     */
+    private fun drawHingeShade(canvas: Canvas, w: Float, h: Float) {
+        val cx = w / 2f
+        val a = FoldMath.glide(FoldMath.clamp(p / 0.72f))
+        val th = a * (Math.PI.toFloat() / 2f)
+        val sn = kotlin.math.sin(th)
+        val co = kotlin.math.cos(th)
+        // Where the folding half has left is dark
+        val pw = (w - cx) * co
+        val edge = cx + pw
+        if (edge < w) {
+            m.setScale(w - edge, 1f); m.postTranslate(edge, 0f)
+            hingeFarShader.setLocalMatrix(m)
+            canvas.drawRect(edge, 0f, w + 1f, h, hingeFarPaint)
+        }
+        if (pw > 0.5f) {
+            hingeTintPaint.alpha = (255 * 0.55f * sn).toInt()
+            canvas.drawRect(cx, 0f, edge, h, hingeTintPaint)
+            m.setScale(pw, 1f); m.postTranslate(cx, 0f)
+            hingeFaceShader.setLocalMatrix(m)
+            hingeFacePaint.alpha = (255 * sn).toInt()
+            canvas.drawRect(cx, 0f, edge, h, hingeFacePaint)
+            // A specular sweep as the panel passes the light
+            val deg = th * 180f / Math.PI.toFloat()
+            val spec = kotlin.math.exp(-((deg - 50f) / 14f) * ((deg - 50f) / 14f))
+            if (spec > 0.01f) {
+                val sx = cx + pw * (0.25f + 0.5f * a)
+                val bw = w * 0.08f
+                m.setScale(bw * 2f, 1f); m.postTranslate(sx - bw, 0f)
+                specShader.setLocalMatrix(m)
+                specPaint.alpha = (255 * 0.55f * spec).toInt()
+                canvas.drawRect(sx - bw, 0f, sx + bw, h, specPaint)
+            }
+        }
+        // Shadow cast on the static half as the panel comes over
+        val sw = w * 0.22f * sn
+        if (sw > 1f) shade(canvas, cx, -sw, 0f, h, 0.45f * sn)
+        // The crease glows brightest mid-fold
+        val cl = kotlin.math.sin(Math.PI.toFloat() * a)
+        band(canvas, cx, 0f, h, w * 0.025f, 0.45f * cl)
+        if (cl > 0.004f) {
+            linePaint.alpha = (255 * 0.85f * cl).toInt()
+            canvas.drawRect(cx - 0.75f, 0f, cx + 0.75f, h, linePaint)
+        }
+        // The static half settles, darkness spreading from the crease to its outer edge
+        val d = FoldMath.glide(FoldMath.clamp((p - 0.66f) / 0.3f))
+        if (d > 0f) {
+            val feather = w * 0.35f
+            val front = cx - d * (cx + feather)
+            m.setScale(feather, 1f); m.postTranslate(front, 0f)
+            duskShader.setLocalMatrix(m)
+            canvas.drawRect(max(0f, front), 0f, cx + 1f, h, duskPaint)
+        }
+        val shut = FoldMath.smooth(FoldMath.clamp((p - 0.94f) / 0.06f))
+        if (shut > 0f) { blackPaint.alpha = (255 * shut).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint) }
     }
 
     // endregion

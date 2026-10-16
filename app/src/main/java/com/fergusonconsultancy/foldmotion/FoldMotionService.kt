@@ -716,7 +716,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Lacquer Panel, closing and opening")
+            .setContentText("Arch Aperture closing, Hinge Shade opening")
             .setOngoing(true)
             .build()
 
