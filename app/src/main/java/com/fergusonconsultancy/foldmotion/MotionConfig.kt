@@ -29,6 +29,13 @@ object MotionConfig {
      */
     val OPENING_EFFECT = Effect.NAVE_OF_LIGHT
 
+    /**
+     * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
+     * finish growing at about 0.68, so the screen stays covered until then.
+     * Was 0.22 (lifting while the ribs grew); raised on 16 Oct 2026.
+     */
+    const val NAVE_LIFT_START = 0.6f
+
     /** Closing effect length before Animator duration scale. */
     const val EFFECT_MS = 900L
 

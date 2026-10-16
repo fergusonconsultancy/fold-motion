@@ -395,16 +395,17 @@ class FoldOverlayView(context: Context) : View(context) {
     // region Gaudí: Nave of Light (opening reveal)
 
     /**
-     * Runs on reveal progress r = 1 - p. Black; the crease ignites from the middle;
-     * ribs of light branch outwards, green at the hinge warming to amber; the
-     * darkness lifts outwards behind them; the ribs fade and leave the screen clean.
+     * Runs on reveal progress r = 1 - p. The crease ignites from the middle and the
+     * ribs branch out over solid black, green at the hinge warming to amber. Only
+     * once the ribs are fully grown does the darkness lift outwards from the
+     * crease, so almost nothing of the screen shows until the effect is done.
      */
     private fun drawNaveOfLight(canvas: Canvas, w: Float, h: Float) {
         val r = 1f - p
         val cx = w / 2f
         val hw = w / 2f
         // Darkness lifts outwards from the crease, feathered at its edge
-        val spread = FoldMath.glide(FoldMath.clamp((r - 0.22f) / 0.6f)) * (hw + w * 0.25f)
+        val spread = FoldMath.glide(FoldMath.clamp((r - MotionConfig.NAVE_LIFT_START) / (0.94f - MotionConfig.NAVE_LIFT_START))) * (hw + w * 0.25f)
         val feather = w * 0.25f
         blackPaint.alpha = 255
         if (spread <= 0f) {
@@ -419,7 +420,7 @@ class FoldOverlayView(context: Context) : View(context) {
         }
         // The crease ignites, growing from the middle up and down
         val ig = FoldMath.glide(FoldMath.clamp((r - 0.02f) / 0.12f))
-        val glow = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.5f) / 0.35f))
+        val glow = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.62f) / 0.28f))
         if (ig > 0f && glow > 0f) {
             val top = h / 2f * (1f - ig)
             val bot = h / 2f * (1f + ig)
@@ -428,7 +429,7 @@ class FoldOverlayView(context: Context) : View(context) {
             canvas.drawRect(cx - 1.5f, top, cx + 1.5f, bot, seamPaint)
         }
         // Ribs: each drawn partially by its own timing, a soft glow under a fine line
-        val bf = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.62f) / 0.3f))
+        val bf = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.74f) / 0.22f))
         if (bf <= 0f) return
         for (i in nFy.indices) {
             val k = FoldMath.clamp((r - nT0[i]) / (nT1[i] - nT0[i]))
