@@ -184,7 +184,7 @@ class MainActivity : Activity(), SensorEventListener {
             )
             val topHz = display?.supportedModes?.maxOfOrNull { it.refreshRate }?.toInt()
             appendLine("Animates at up to ${topHz ?: "?"}Hz")
-            appendLine("Effects: Ruled Surface when closing, Crease Split when opening, in Visconti green.")
+            appendLine("Effects: Lacquer Panel when closing, Arch Aperture when opening, in Visconti green.")
             appendLine(
                 if (AutoStart.isEnabled(this@MainActivity)) "Starts automatically after a restart: on"
                 else "Starts automatically after a restart: off (tap Start animation)"

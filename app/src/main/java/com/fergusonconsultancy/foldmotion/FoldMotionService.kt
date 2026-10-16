@@ -106,6 +106,16 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
     private var lastOpenStepAt = 0L
+    private var lastInnerSwitchAt = 0L
+
+    // Fold posture from Jetpack WindowManager. FLAT to HALF_OPENED is the moment a close
+    // begins, well before the coarse hinge sensor reports 90 degrees, and on fast closes
+    // the hinge sensor sometimes reported only after One UI had already switched (16 Oct).
+    private var postureFlat: Boolean? = null
+    private var postureTracker: androidx.window.java.layout.WindowInfoTrackerCallbackAdapter? = null
+    private val postureListener = androidx.core.util.Consumer<androidx.window.layout.WindowLayoutInfo> { info ->
+        onPosture(info)
+    }
     /** When the reveal began waiting for the main screen to report it is lit. */
     private var panelWaitFrom = 0L
     private var panelLit = false
@@ -178,6 +188,7 @@ class FoldMotionService : Service(), SensorEventListener {
             playStartAt = 0L
             EventLog.add(this@FoldMotionService, if (inner) "One UI switched to the inner screen" else "One UI switched to the cover")
             recordSwitch(inner)
+            if (inner) lastInnerSwitchAt = now
             if (inner && phase == Phase.ARMED) {
                 // Reveal straight away; no waiting on the panel, which stalled on 14 Oct
                 switchedAt = now
@@ -255,6 +266,7 @@ class FoldMotionService : Service(), SensorEventListener {
         runCatching { unregisterReceiver(screenReceiver) }
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         windowContext?.let { runCatching { it.unregisterComponentCallbacks(displayCallbacks) } }
+        runCatching { postureTracker?.removeWindowLayoutInfoListener(postureListener) }
         overlay?.let { runCatching { windowManager.removeView(it) } }
         overlay = null
         running = false
@@ -307,6 +319,13 @@ class FoldMotionService : Service(), SensorEventListener {
         currentInner = FoldMath.isInnerShape(config.screenWidthDp.toFloat(), config.screenHeightDp.toFloat())
         notifiedInner = currentInner
         ctx.registerComponentCallbacks(displayCallbacks)
+        runCatching {
+            val tracker = androidx.window.java.layout.WindowInfoTrackerCallbackAdapter(
+                androidx.window.layout.WindowInfoTracker.getOrCreate(ctx)
+            )
+            tracker.addWindowLayoutInfoListener(ctx, mainExecutor, postureListener)
+            postureTracker = tracker
+        }.onFailure { EventLog.add(this, "Fold posture unavailable: ${it.javaClass.simpleName}") }
 
         overlay = FoldOverlayView(ctx).also {
             it.visibility = View.VISIBLE
@@ -440,18 +459,7 @@ class FoldMotionService : Service(), SensorEventListener {
             // Changed their mind and closed again while still on the cover
             phase == Phase.ARMED && closing -> finish()
             // Closing the inner screen
-            phase == Phase.IDLE && innerNow && closing && !bounce -> {
-                overlay?.mode = FoldOverlayView.Mode.CLOSE
-                // Fitted to this owner's closing speed once enough closes are learned
-                playMs = Timing.fittedMs(this, MotionConfig.EFFECT_MS * scale)
-                playStartAt = now
-                stats.reset()
-                overlay?.drawCount = 0
-                tickDone = false
-                clickDone = false
-                Status.mark(this, Status.PLAYED)
-                enter(Phase.PLAYING)
-            }
+            phase == Phase.IDLE && innerNow && closing && !bounce -> startClose(now, scale)
             // Opened back up mid-fold: let the blades go
             (phase == Phase.PLAYING || phase == Phase.HOLDING) && currentInner && !closing -> {
                 fadeFrom = currentProgress()
@@ -497,6 +505,43 @@ class FoldMotionService : Service(), SensorEventListener {
             ticking = true
             Choreographer.getInstance().postFrameCallback(frameCallback)
         }
+    }
+
+    private fun startClose(now: Long, scale: Float) {
+        overlay?.mode = FoldOverlayView.Mode.CLOSE
+        // Fitted to this owner's closing speed once enough closes are learned
+        playMs = Timing.fittedMs(this, MotionConfig.EFFECT_MS * scale)
+        playStartAt = now
+        stats.reset()
+        overlay?.drawCount = 0
+        tickDone = false
+        clickDone = false
+        Status.mark(this, Status.PLAYED)
+        enter(Phase.PLAYING)
+    }
+
+    /** Fold posture changed. Starts the closing effect the moment the main screen leaves flat. */
+    private fun onPosture(info: androidx.window.layout.WindowLayoutInfo) {
+        val fold = info.displayFeatures.firstOrNull { it is androidx.window.layout.FoldingFeature }
+            as? androidx.window.layout.FoldingFeature
+        val flat = fold?.state == androidx.window.layout.FoldingFeature.State.FLAT
+        val half = fold?.state == androidx.window.layout.FoldingFeature.State.HALF_OPENED
+        val was = postureFlat
+        postureFlat = if (fold == null) null else flat
+        if (was != true || !half) return
+        val now = SystemClock.uptimeMillis()
+        val scale = animScale()
+        val decision = when {
+            phase != Phase.IDLE -> "an effect is already running"
+            now - lastOpenStepAt < MotionConfig.BOUNCE_GUARD_MS || now - lastInnerSwitchAt < MotionConfig.BOUNCE_GUARD_MS ->
+                "just opened, settling: ignored"
+            !innerShowingNow() -> "cover is showing: skipped"
+            scale <= 0f -> "animations are off: skipped"
+            else -> null
+        }
+        if (decision != null) { EventLog.add(this, "Fold started (posture), $decision"); return }
+        EventLog.add(this, "Fold started (posture): PLAYED")
+        startClose(now, scale)
     }
 
     private fun startReveal(afterUnlock: Boolean = false) {
@@ -671,7 +716,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Ruled Surface closing, Crease Split opening")
+            .setContentText("Lacquer Panel closing, Arch Aperture opening")
             .setOngoing(true)
             .build()
 

@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 16 Oct 2026 (evening): closing Lacquer Panel, opening Arch Aperture, chosen in Studio.
  * 16 Oct 2026: closing Ruled Surface (Gaudí), opening Crease Split; Nave of Light tried and dropped.
  * 15 Oct 2026: Crease Split closing and opening.
  * Earlier, 14 Oct 2026:
@@ -15,19 +16,21 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE }
 
     /**
-     * Closing effect. Ruled Surface since 16 Oct 2026 (Gaudí): straight threads
-     * twist into a hyperbolic curve, collapse onto the crease, which flashes.
+     * Closing effect. Lacquer Panel since 16 Oct 2026 (evening): two halves of Visconti
+     * paint close onto the crease, a clear-coat reflection sweeps left to right, then
+     * black. Ruled Surface (Gaudí) before that.
      */
-    val CLOSING_EFFECT = Effect.RULED_SURFACE
+    val CLOSING_EFFECT = Effect.LACQUER_PANEL
 
     /**
-     * Opening effect. Crease Split reveal. Nave of Light (Gaudí) was tried on
-     * 16 Oct 2026 and dropped the same day: impressive, but not the right feel.
+     * Opening effect. Arch Aperture since 16 Oct 2026 (evening): the crease ignites
+     * and flashes, then opens into a parabolic arch with a lit rim. Crease Split
+     * before that; Nave of Light was tried and dropped.
      */
-    val OPENING_EFFECT = Effect.CREASE_SPLIT
+    val OPENING_EFFECT = Effect.ARCH_APERTURE
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
@@ -49,7 +52,7 @@ object MotionConfig {
 
     /** Haptic moments: a soft tick as the motion starts, a crisp click on the crease flash (Crease Split) or as the plane lands (One Plane). */
     const val TICK_AT = 0.03f
-    const val CLICK_AT = 0.74f
+    const val CLICK_AT = 0.5f
 
     /** Stay black this long after the effect if no screen switch follows, then fade out. */
     const val HOLD_TIMEOUT_MS = 600L

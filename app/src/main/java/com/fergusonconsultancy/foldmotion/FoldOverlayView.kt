@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.view.View
@@ -126,6 +127,18 @@ class FoldOverlayView(context: Context) : View(context) {
     private val panelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = panelShader }
     private val shadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = shadeShader }
     private val shadeVPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = shadeVShader }
+
+    // ---- Lacquer Panel: deep paint, dark at the outer edge, lit at the leading lip
+    private val lacquerPanelShader = unitH(
+        intArrayOf(Color.rgb(0, 18, 11), Color.rgb(2, 84, 44), Color.rgb(14, 132, 70), Color.rgb(150, 235, 185)),
+        floatArrayOf(0f, 0.6f, 0.97f, 1f)
+    )
+    private val lacquerPanelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = lacquerPanelShader }
+
+    // ---- Arch Aperture
+    private val archPath = Path()
+    private val maskPath = Path().apply { fillType = Path.FillType.EVEN_ODD }
+    private val archStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
     // ---- Gaudí pieces
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -251,6 +264,8 @@ class FoldOverlayView(context: Context) : View(context) {
             MotionConfig.Effect.CREASE_SPLIT -> drawCreaseSplit(canvas, w, h)
             MotionConfig.Effect.RULED_SURFACE -> drawRuledSurface(canvas, w, h)
             MotionConfig.Effect.NAVE_OF_LIGHT -> drawNaveOfLight(canvas, w, h)
+            MotionConfig.Effect.LACQUER_PANEL -> drawLacquerPanel(canvas, w, h)
+            MotionConfig.Effect.ARCH_APERTURE -> drawArchAperture(canvas, w, h)
         }
 
         canvas.restoreToCount(flip)
@@ -339,6 +354,139 @@ class FoldOverlayView(context: Context) : View(context) {
             m.setScale(feather, 1f); m.postTranslate(f, 0f)
             duskShader.setLocalMatrix(m)
             canvas.drawRect(max(0f, f), 0f, w + 1f, h, duskPaint)
+        }
+    }
+
+    // endregion
+
+    // region Lacquer Panel
+
+    /**
+     * On reveal progress r = 1 - p (closing runs it the other way). A full panel of
+     * Visconti paint with flake and lacquer; a clear-coat reflection sweeps left to
+     * right; the panel splits at the crease and the halves part. Black at p = 1.
+     */
+    private fun drawLacquerPanel(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
+        val cx = w / 2f
+        val eA = FoldMath.glide(FoldMath.clamp((r - 0.5f) / 0.45f))
+        val eB = FoldMath.glide(FoldMath.clamp((r - 0.55f) / 0.42f))
+        val xa = cx + (w - cx) * eA
+        val xb = cx - cx * eB
+        lacquerHalf(canvas, xa, w + 1f, xa, h)
+        lacquerHalf(canvas, 0f, xb, xb, h)
+
+        // Clear-coat reflection. Drawn mirrored, so travelling towards x = 0 here is left to
+        // right on screen; when closing the progress runs backwards, so flip the sweep to keep
+        // it moving left to right in both directions.
+        val raw = FoldMath.clamp((r - 0.12f) / 0.38f)
+        val sw = if (mode == Mode.CLOSE) 1f - raw else raw
+        val gA = FoldMath.smooth(FoldMath.clamp(r / 0.1f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.5f) / 0.12f)))
+        if (gA > 0.004f) {
+            val gw = w * 0.22f
+            val gx = w - sw * (w + gw * 1.5f) + gw * 0.25f
+            m.setScale(gw, 1f); m.postTranslate(gx, 0f)
+            glossShader.setLocalMatrix(m)
+            glossPaint.alpha = (255 * gA).toInt()
+            for (side in 0..1) {
+                val l = if (side == 0) xa else 0f
+                val rr = if (side == 0) w + 1f else xb
+                val x0 = max(l, gx)
+                val x1 = min(rr, gx + gw)
+                if (x1 <= x0) continue
+                canvas.drawRect(x0, 0f, x1, h, glossPaint)
+                flakePaint.alpha = (255 * 0.6f * gA).toInt()
+                val f0 = max(l, gx + gw * 0.3f)
+                val f1 = min(rr, gx + gw * 0.7f)
+                if (f1 > f0) canvas.drawRect(f0, 0f, f1, h, flakePaint)
+            }
+        }
+        // Shadows cast on the screen as the halves part
+        shade(canvas, xa, -w * 0.05f, 0f, h, 0.8f * min(1f, eA * 8f) * (1f - eA))
+        shade(canvas, xb, w * 0.05f, 0f, h, 0.8f * min(1f, eB * 8f) * (1f - eB))
+        // From black
+        val black = 1f - FoldMath.smooth(FoldMath.clamp(r / 0.12f))
+        if (black > 0f) { blackPaint.alpha = (255 * black).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint) }
+    }
+
+    /** One half of the panel, from x0 to x1, lit towards its leading edge. */
+    private fun lacquerHalf(canvas: Canvas, x0: Float, x1: Float, lead: Float, h: Float) {
+        if (x1 - x0 < 0.5f) return
+        val outer = if (lead == x0) x1 else x0
+        m.setScale(lead - outer, 1f); m.postTranslate(outer, 0f)
+        lacquerPanelShader.setLocalMatrix(m)
+        canvas.drawRect(x0, 0f, x1, h, lacquerPanelPaint)
+        flakePaint.alpha = (255 * 0.16f).toInt()
+        canvas.drawRect(x0, 0f, x1, h, flakePaint)
+        m.setScale(1f, h)
+        lacquerShader.setLocalMatrix(m)
+        canvas.drawRect(x0, 0f, x1, h, lacquerPaint)
+    }
+
+    // endregion
+
+    // region Arch Aperture
+
+    /**
+     * On reveal progress r = 1 - p. A slit ignites down the crease and flashes, then
+     * opens into a parabolic arch with a lit rim, widening past the edges. The screen
+     * only shows inside the arch, from about halfway through.
+     */
+    private fun drawArchAperture(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
+        val cx = w / 2f
+        val cy = h / 2f
+        val o = FoldMath.glide(FoldMath.clamp((r - 0.42f) / 0.5f))
+        val a = o * w * 0.8f
+        val e = h * 0.25f
+        blackPaint.alpha = 255
+        if (a <= 0.5f) {
+            canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
+        } else {
+            archPath.reset()
+            archPath.moveTo(cx, -e)
+            archPath.quadTo(cx + 2f * a, cy, cx, h + e)
+            archPath.quadTo(cx - 2f * a, cy, cx, -e)
+            archPath.close()
+            maskPath.reset()
+            maskPath.addRect(0f, 0f, w + 1f, h, Path.Direction.CW)
+            maskPath.addPath(archPath)
+            canvas.drawPath(maskPath, blackPaint)
+            // Inner shadow, a soft green halo and a fine lit rim give the arch depth
+            val rim = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.8f) / 0.18f))
+            if (rim > 0f) {
+                val c = canvas.save()
+                canvas.clipPath(archPath)
+                archStroke.color = Color.BLACK
+                archStroke.alpha = (255 * 0.55f * rim).toInt()
+                archStroke.strokeWidth = w * 0.06f
+                canvas.drawPath(archPath, archStroke)
+                canvas.restoreToCount(c)
+                archStroke.color = Color.rgb(40, 200, 110)
+                archStroke.alpha = (255 * 0.28f * rim).toInt()
+                archStroke.strokeWidth = w * 0.02f
+                canvas.drawPath(archPath, archStroke)
+                archStroke.color = Color.rgb(190, 245, 205)
+                archStroke.alpha = (255 * 0.9f * rim).toInt()
+                archStroke.strokeWidth = max(1.5f, w * 0.003f)
+                canvas.drawPath(archPath, archStroke)
+            }
+        }
+        // The crease ignites from the middle, then flashes, before the arch opens
+        val ig = FoldMath.glide(FoldMath.clamp(r / 0.14f))
+        val glow = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.45f) / 0.2f))
+        if (ig > 0f && glow > 0f) {
+            val top = cy * (1f - ig)
+            val bot = cy * (1f + ig)
+            greenBand(canvas, cx, top, bot, w * 0.12f, 0.35f * glow, 0f, w + 1f)
+            seamPaint.alpha = (255 * 0.9f * glow).toInt()
+            canvas.drawRect(cx - 1.5f, top, cx + 1.5f, bot, seamPaint)
+        }
+        val fl = FoldMath.smooth(FoldMath.clamp((r - 0.22f) / 0.1f)) *
+            (1f - FoldMath.smooth(FoldMath.clamp((r - 0.36f) / 0.14f)))
+        if (fl > 0f) {
+            greenBand(canvas, cx, 0f, h, w * 0.3f, 0.5f * fl, 0f, w + 1f)
+            band(canvas, cx, 0f, h, w * 0.05f, 0.8f * fl)
         }
     }
 
