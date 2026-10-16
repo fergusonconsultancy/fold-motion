@@ -98,6 +98,10 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
     private var firstRevealFrameLogged = false
+    private var lastOpenStepAt = 0L
+    /** When the reveal began waiting for the main screen to report it is lit. */
+    private var panelWaitFrom = 0L
+    private var panelLit = false
 
     companion object {
         /** True while the service is alive in this process; shown on the home screen. */
@@ -380,6 +384,10 @@ class FoldMotionService : Service(), SensorEventListener {
 
         val closing = angle < previous
         val scale = animScale()
+        // The hinge can bounce (180 to 90 to 180) as the phone settles open; a "close"
+        // straight after an opening step is that bounce, not a real close
+        val bounce = closing && now - lastOpenStepAt < MotionConfig.BOUNCE_GUARD_MS
+        if (!closing) lastOpenStepAt = now
 
         // Record what was seen and decided, for the home screen log
         val step = "Hinge ${previous.roundToInt()}° to ${angle.roundToInt()}°"
@@ -391,6 +399,7 @@ class FoldMotionService : Service(), SensorEventListener {
             !closing -> "opening on the cover: ARMED, reveal to follow"
             phase == Phase.ARMED -> "closed again before the switch: cover cleared"
             !innerNow -> "closing, but the cover is showing: skipped"
+            bounce -> "hinge bounced while opening: ignored"
             phase != Phase.IDLE -> "still closing, effect already playing"
             scale <= 0f -> "closing, but animations are off in Developer options: skipped"
             else -> "closing on the inner screen: PLAYED"
@@ -409,7 +418,7 @@ class FoldMotionService : Service(), SensorEventListener {
             // Changed their mind and closed again while still on the cover
             phase == Phase.ARMED && closing -> finish()
             // Closing the inner screen
-            phase == Phase.IDLE && innerNow && closing -> {
+            phase == Phase.IDLE && innerNow && closing && !bounce -> {
                 overlay?.mode = FoldOverlayView.Mode.CLOSE
                 // Fitted to this owner's closing speed once enough closes are learned
                 playMs = Timing.fittedMs(this, MotionConfig.EFFECT_MS * scale)
@@ -438,7 +447,7 @@ class FoldMotionService : Service(), SensorEventListener {
     /** Developer options > Animator duration scale. 0 means animations off. */
     /** Opening noticed by the switch alone: phone last seen closed, nothing playing, animations on. */
     private fun catchUpDue(): Boolean =
-        MotionConfig.CATCH_UP_REVEAL && phase == Phase.IDLE && lastAngle in 0f..1f &&
+        MotionConfig.CATCH_UP_REVEAL && phase == Phase.IDLE &&
             isInteractive() && animScale() > 0f
 
     private fun animScale(): Float = runCatching {
@@ -488,7 +497,7 @@ class FoldMotionService : Service(), SensorEventListener {
         Choreographer.getInstance().postFrameCallback(frameCallback)
         ticking = true
         mainHandler.removeCallbacks(revealDeadline)
-        mainHandler.postDelayed(revealDeadline, revealMs.toLong() + MotionConfig.REVEAL_GRACE_MS)
+        mainHandler.postDelayed(revealDeadline, revealMs.toLong() + MotionConfig.REVEAL_GRACE_MS + MotionConfig.PANEL_WAIT_MAX_MS)
         EventLog.add(this, "Revealing (display state ${display?.state ?: -1})")
     }
 
@@ -554,9 +563,22 @@ class FoldMotionService : Service(), SensorEventListener {
                     firstRevealFrameLogged = true
                     val lag = SystemClock.uptimeMillis() - switchedAt
                     if (lag > 100) EventLog.add(this, "First reveal frame ${lag}ms after the switch")
-                    // Start the clock on the first frame Android actually delivers, so a slow
-                    // panel switch cannot eat the start of the reveal
-                    phaseAt = SystemClock.uptimeMillis()
+                    panelWaitFrom = SystemClock.uptimeMillis()
+                    panelLit = false
+                }
+                if (!panelLit) {
+                    // Hold black until the main screen reports it is lit, so the reveal is
+                    // not spent on a panel that is still powering up (capped, never stuck)
+                    val waited = SystemClock.uptimeMillis() - panelWaitFrom
+                    if (display?.state == Display.STATE_ON || waited >= MotionConfig.PANEL_WAIT_MAX_MS) {
+                        panelLit = true
+                        if (waited > 30) EventLog.add(this, "Main screen lit after ${waited}ms: reveal starts")
+                        phaseAt = SystemClock.uptimeMillis()
+                    } else {
+                        view.show(1f)
+                        Choreographer.getInstance().postFrameCallback(frameCallback)
+                        return
+                    }
                 }
                 val k = FoldMath.clamp(elapsed() / revealMs)
                 view.show(1f - FoldMath.glide(k))

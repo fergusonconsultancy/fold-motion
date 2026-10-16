@@ -440,11 +440,9 @@ class FoldOverlayView(context: Context) : View(context) {
             val ye = y1 + (nFy[i] * h + nY2[i] * hw - y1) * k
             val d = nDepth[i]
             val lw = max(1f, w * 0.007f * (1f - d * 0.22f))
+            // One stroke per rib (the soft glow beneath was cut on 16 Oct 2026 to halve the work)
             strokePaint.color = depthColor[d]
-            strokePaint.strokeWidth = lw * 4f
-            strokePaint.alpha = (255 * 0.22f * bf).toInt()
-            canvas.drawLine(x1, y1, xe, ye, strokePaint)
-            strokePaint.strokeWidth = lw
+            strokePaint.strokeWidth = lw * 1.4f
             strokePaint.alpha = (255 * 0.95f * bf).toInt()
             canvas.drawLine(x1, y1, xe, ye, strokePaint)
             if (d == 3 && k < 1f) {

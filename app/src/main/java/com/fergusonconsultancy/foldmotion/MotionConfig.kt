@@ -55,8 +55,17 @@ object MotionConfig {
     const val HOLD_TIMEOUT_MS = 600L
     const val FADE_MS = 200L
 
-    /** Opening: give up if One UI has not switched to the main screen this long after arming. */
-    const val ARM_TIMEOUT_MS = 700L
+    /**
+     * Opening: give up if One UI has not switched to the main screen this long after
+     * arming. Was 700ms; raised on 16 Oct 2026 after a wake from screen-off took longer.
+     */
+    const val ARM_TIMEOUT_MS = 1500L
+
+    /** Opening: longest the reveal holds black waiting for the main screen to report it is lit. */
+    const val PANEL_WAIT_MAX_MS = 350L
+
+    /** A closing step this soon after an opening step is the hinge bouncing, not a close. */
+    const val BOUNCE_GUARD_MS = 600L
 
     /**
      * Opening: if One UI switches to the main screen before the hinge sensor has
