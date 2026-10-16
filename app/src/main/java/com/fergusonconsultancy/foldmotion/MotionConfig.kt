@@ -1,7 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * 16 Oct 2026: closingEffect "ruled", openingEffect "nave", finish "visconti", effectMs 900, revealMs 650.
+ * 16 Oct 2026: closing Ruled Surface (Gaudí), opening Crease Split; Nave of Light tried and dropped.
  * 15 Oct 2026: Crease Split closing and opening.
  * Earlier, 14 Oct 2026:
  *   closingEffect "composition" (De Stijl, One Plane), openingEffect "creasesplit",
@@ -24,10 +24,10 @@ object MotionConfig {
     val CLOSING_EFFECT = Effect.RULED_SURFACE
 
     /**
-     * Opening effect. Nave of Light since 16 Oct 2026 (Gaudí): built for opening,
-     * not a closing effect reversed. The crease ignites and light branches out.
+     * Opening effect. Crease Split reveal. Nave of Light (Gaudí) was tried on
+     * 16 Oct 2026 and dropped the same day: impressive, but not the right feel.
      */
-    val OPENING_EFFECT = Effect.NAVE_OF_LIGHT
+    val OPENING_EFFECT = Effect.CREASE_SPLIT
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
