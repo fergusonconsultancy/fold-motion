@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 18 Oct 2026: Signature made grander (800ms, bigger ignition, brighter flood fronts, lip flare).
  * 16 Oct 2026 (late): opening Signature (champagne seam, lacquer flood, reflection, parting); Hinge Shade rejected.
  * 16 Oct 2026 (night): closingEffect "aperture", openingEffect "hingeshade", finish "visconti", effectMs 900, revealMs 650.
  * 16 Oct 2026 (night): Lacquer Panel closing and opening.
@@ -44,8 +45,11 @@ object MotionConfig {
     /** Closing effect length before Animator duration scale. */
     const val EFFECT_MS = 900L
 
-    /** Opening reveal length before Animator duration scale. Taps are ignored while it plays. */
-    const val REVEAL_MS = 650L
+    /**
+     * Opening reveal length before Animator duration scale. Taps are ignored while it
+     * plays. 800ms since 18 Oct 2026 so Signature's four acts can land (was 650ms).
+     */
+    const val REVEAL_MS = 800L
 
     /** Closing stages, as shares of eased progress (0 to 1). Rules draw from 0. */
     const val PLANE_START = 0.20f

@@ -397,7 +397,7 @@ class FoldOverlayView(context: Context) : View(context) {
     private fun drawSignature(canvas: Canvas, w: Float, h: Float) {
         val r = 1f - p
         val cx = w / 2f
-        val flood = FoldMath.glide(FoldMath.clamp((r - 0.03f) / 0.2f))
+        val flood = FoldMath.glide(FoldMath.clamp((r - 0.05f) / 0.24f))
         val spread = flood * (cx + 2f)
         if (flood > 0f) {
             val c = canvas.save()
@@ -411,22 +411,37 @@ class FoldOverlayView(context: Context) : View(context) {
             canvas.drawRect(0f, 0f, max(0f, cx - spread), h, blackPaint)
             canvas.drawRect(min(w + 1f, cx + spread), 0f, w + 1f, h, blackPaint)
             // The flood fronts, lit in champagne
-            val fa = 0.9f * (1f - flood) * FoldMath.smooth(FoldMath.clamp(flood / 0.08f))
+            val fa = (1f - flood) * FoldMath.smooth(FoldMath.clamp(flood / 0.06f))
             if (fa > 0.004f) {
                 for (x in floatArrayOf(cx - spread, cx + spread)) {
                     seamPaint.alpha = (255 * fa).toInt()
-                    canvas.drawRect(x - 1f, 0f, x + 1f, h, seamPaint)
-                    band(canvas, x, 0f, h, w * 0.03f, 0.35f * fa)
+                    canvas.drawRect(x - 1.5f, 0f, x + 1.5f, h, seamPaint)
+                    band(canvas, x, 0f, h, w * 0.05f, 0.5f * fa)
+                    greenBand(canvas, x, 0f, h, w * 0.12f, 0.3f * fa, 0f, w + 1f)
                 }
             }
         }
         // The seam ignites on the crease, then gives way to the paint
-        val seam = FoldMath.smooth(FoldMath.clamp(r / 0.05f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.18f) / 0.14f)))
+        // Bigger ignition: a wide green bloom, a broad white glow and a hot champagne core,
+        // held a beat before the paint takes over
+        val seam = FoldMath.smooth(FoldMath.clamp(r / 0.05f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.22f) / 0.16f)))
         if (seam > 0f) {
-            greenBand(canvas, cx, 0f, h, w * 0.25f, 0.4f * seam, 0f, w + 1f)
-            band(canvas, cx, 0f, h, w * 0.06f, 0.8f * seam)
+            greenBand(canvas, cx, 0f, h, w * 0.38f, 0.55f * seam, 0f, w + 1f)
+            band(canvas, cx, 0f, h, w * 0.18f, 0.3f * seam)
+            band(canvas, cx, 0f, h, w * 0.07f, 0.95f * seam)
             seamPaint.alpha = (255 * seam).toInt()
-            canvas.drawRect(cx - 1.5f, 0f, cx + 1.5f, h, seamPaint)
+            canvas.drawRect(cx - 2.5f, 0f, cx + 2.5f, h, seamPaint)
+        }
+        // As the halves begin to part, their champagne lips flare once
+        val eA = FoldMath.glide(FoldMath.clamp((r - 0.5f) / 0.45f))
+        val eB = FoldMath.glide(FoldMath.clamp((r - 0.55f) / 0.42f))
+        val flare = FoldMath.smooth(FoldMath.clamp((r - 0.48f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.58f) / 0.16f)))
+        if (flare > 0f) {
+            for (x in floatArrayOf(cx + (w - cx) * eA, cx - cx * eB)) {
+                band(canvas, x, 0f, h, w * 0.06f, 0.7f * flare)
+                seamPaint.alpha = (255 * flare).toInt()
+                canvas.drawRect(x - 1.5f, 0f, x + 1.5f, h, seamPaint)
+            }
         }
     }
 
