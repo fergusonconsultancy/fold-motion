@@ -160,6 +160,15 @@ class FoldOverlayView(context: Context) : View(context) {
     )
     private val specPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = specShader }
 
+    // ---- Grand closing surround: Visconti paint, lit towards the crease
+    private val surroundShader = unitH(
+        intArrayOf(Color.rgb(0, 14, 9), Color.rgb(4, 84, 44), Color.rgb(14, 132, 70), Color.rgb(4, 84, 44), Color.rgb(0, 14, 9)),
+        floatArrayOf(0f, 0.35f, 0.5f, 0.65f, 1f)
+    )
+    private val surroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = surroundShader }
+    private val glintShader = unitRadial(Color.rgb(255, 246, 228))
+    private val glintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glintShader }
+
     // ---- Arch Aperture
     private val archPath = Path()
     private val maskPath = Path().apply { fillType = Path.FillType.EVEN_ODD }
@@ -593,9 +602,9 @@ class FoldOverlayView(context: Context) : View(context) {
         val o = FoldMath.glide(FoldMath.clamp((r - 0.42f) / 0.5f))
         val a = o * w * 0.8f
         val e = h * 0.25f
-        blackPaint.alpha = 255
+        // Outside the arch: curtains of Visconti lacquer (a grand closing; 18 Oct 2026)
         if (a <= 0.5f) {
-            canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
+            drawSurround(canvas, w, h)
         } else {
             archPath.reset()
             archPath.moveTo(cx, -e)
@@ -605,8 +614,11 @@ class FoldOverlayView(context: Context) : View(context) {
             maskPath.reset()
             maskPath.addRect(0f, 0f, w + 1f, h, Path.Direction.CW)
             maskPath.addPath(archPath)
-            canvas.drawPath(maskPath, blackPaint)
-            // Inner shadow, a soft green halo and a fine lit rim give the arch depth
+            val c0 = canvas.save()
+            canvas.clipPath(maskPath)
+            drawSurround(canvas, w, h)
+            canvas.restoreToCount(c0)
+            // Inner shadow, a green halo and a champagne-cored rim
             val rim = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.8f) / 0.18f))
             if (rim > 0f) {
                 val c = canvas.save()
@@ -617,30 +629,69 @@ class FoldOverlayView(context: Context) : View(context) {
                 canvas.drawPath(archPath, archStroke)
                 canvas.restoreToCount(c)
                 archStroke.color = Color.rgb(40, 200, 110)
-                archStroke.alpha = (255 * 0.28f * rim).toInt()
-                archStroke.strokeWidth = w * 0.02f
+                archStroke.alpha = (255 * 0.32f * rim).toInt()
+                archStroke.strokeWidth = w * 0.025f
                 canvas.drawPath(archPath, archStroke)
-                archStroke.color = Color.rgb(190, 245, 205)
-                archStroke.alpha = (255 * 0.9f * rim).toInt()
-                archStroke.strokeWidth = max(1.5f, w * 0.003f)
+                archStroke.color = Color.rgb(255, 244, 222)
+                archStroke.alpha = (255 * 0.95f * rim).toInt()
+                archStroke.strokeWidth = max(2f, w * 0.004f)
                 canvas.drawPath(archPath, archStroke)
             }
         }
-        // The crease ignites from the middle, then flashes, before the arch opens
+        // Once sealed, the paint fades to black
+        val dark = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.12f) / 0.3f))
+        if (dark > 0f) { blackPaint.alpha = (255 * dark).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint) }
+        // The seam on the crease: it collapses to the centre as the effect ends
         val ig = FoldMath.glide(FoldMath.clamp(r / 0.14f))
         val glow = 1f - FoldMath.smooth(FoldMath.clamp((r - 0.45f) / 0.2f))
         if (ig > 0f && glow > 0f) {
             val top = cy * (1f - ig)
             val bot = cy * (1f + ig)
-            greenBand(canvas, cx, top, bot, w * 0.12f, 0.35f * glow, 0f, w + 1f)
-            seamPaint.alpha = (255 * 0.9f * glow).toInt()
-            canvas.drawRect(cx - 1.5f, top, cx + 1.5f, bot, seamPaint)
+            greenBand(canvas, cx, top, bot, w * 0.14f, 0.4f * glow, 0f, w + 1f)
+            seamPaint.alpha = (255 * 0.95f * glow).toInt()
+            canvas.drawRect(cx - 2f, top, cx + 2f, bot, seamPaint)
         }
+        // The seal: a big champagne flash as the arch meets the crease
         val fl = FoldMath.smooth(FoldMath.clamp((r - 0.22f) / 0.1f)) *
-            (1f - FoldMath.smooth(FoldMath.clamp((r - 0.36f) / 0.14f)))
+            (1f - FoldMath.smooth(FoldMath.clamp((r - 0.38f) / 0.12f)))
         if (fl > 0f) {
-            greenBand(canvas, cx, 0f, h, w * 0.3f, 0.5f * fl, 0f, w + 1f)
-            band(canvas, cx, 0f, h, w * 0.05f, 0.8f * fl)
+            greenBand(canvas, cx, 0f, h, w * 0.38f, 0.55f * fl, 0f, w + 1f)
+            band(canvas, cx, 0f, h, w * 0.18f, 0.3f * fl)
+            band(canvas, cx, 0f, h, w * 0.07f, 0.95f * fl)
+        }
+        // The last point of light, going out
+        val glint = FoldMath.smooth(FoldMath.clamp(r / 0.03f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.05f) / 0.1f)))
+        if (glint > 0f) {
+            val rad = w * 0.06f
+            m.setScale(rad, rad); m.postTranslate(cx, cy)
+            glintShader.setLocalMatrix(m)
+            glintPaint.alpha = (255 * glint).toInt()
+            canvas.drawRect(cx - rad, cy - rad, cx + rad, cy + rad, glintPaint)
+        }
+    }
+
+    /** Visconti lacquer for the closing curtains, with flake, clear coat and a champagne reflection. */
+    private fun drawSurround(canvas: Canvas, w: Float, h: Float) {
+        m.setScale(w, 1f)
+        surroundShader.setLocalMatrix(m)
+        canvas.drawRect(0f, 0f, w + 1f, h, surroundPaint)
+        flakePaint.alpha = (255 * 0.16f).toInt()
+        canvas.drawRect(0f, 0f, w + 1f, h, flakePaint)
+        m.setScale(1f, h)
+        lacquerShader.setLocalMatrix(m)
+        canvas.drawRect(0f, 0f, w + 1f, h, lacquerPaint)
+        // Reflection travels left to right on screen (drawing is mirrored) while the arch closes
+        val q = FoldMath.clamp((p - 0.05f) / 0.5f)
+        val gA = FoldMath.smooth(FoldMath.clamp(p / 0.1f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.5f) / 0.12f)))
+        if (gA > 0.004f) {
+            val gw = w * 0.22f
+            val gx = w - q * (w + gw * 1.5f) + gw * 0.25f
+            m.setScale(gw, 1f); m.postTranslate(gx, 0f)
+            champagneGlossShader.setLocalMatrix(m)
+            champagneGlossPaint.alpha = (255 * gA).toInt()
+            canvas.drawRect(max(0f, gx), 0f, min(w + 1f, gx + gw), h, champagneGlossPaint)
+            flakePaint.alpha = (255 * 0.6f * gA).toInt()
+            canvas.drawRect(max(0f, gx + gw * 0.3f), 0f, min(w + 1f, gx + gw * 0.7f), h, flakePaint)
         }
     }
 

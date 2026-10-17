@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 18 Oct 2026: Arch Aperture made a grand closing (lacquer curtains, champagne rim, seal flash, last point of light).
  * 18 Oct 2026: Signature made grander (800ms, bigger ignition, brighter flood fronts, lip flare).
  * 16 Oct 2026 (late): opening Signature (champagne seam, lacquer flood, reflection, parting); Hinge Shade rejected.
  * 16 Oct 2026 (night): closingEffect "aperture", openingEffect "hingeshade", finish "visconti", effectMs 900, revealMs 650.
