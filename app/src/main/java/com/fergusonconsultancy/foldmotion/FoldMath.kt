@@ -34,12 +34,15 @@ object FoldMath {
     /**
      * Magnetic release: two things held together. They cling first (a slight creep as the
      * hold gives), break away, then glide to rest. The opposite of magnetIn.
+     * The release uses smootherstep (18 Oct 2026): a rounded speed peak of 2.26x at 60%.
+     * It was glide, whose speed rose to a sharp 3.6x point.
      */
     fun magnetOut(u: Float): Float {
         val c = clamp(u)
         val hold = 0.2f
         if (c < hold) return 0.035f * smooth(c / hold)
-        return 0.035f + 0.965f * glide((c - hold) / (1f - hold))
+        val t = (c - hold) / (1f - hold)
+        return 0.035f + 0.965f * (t * t * t * (t * (6f * t - 15f) + 10f))
     }
 
     /** Smoothstep. */
