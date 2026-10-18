@@ -9,19 +9,26 @@ object FoldMath {
     fun clamp(v: Float, lo: Float = 0f, hi: Float = 1f): Float = min(hi, max(lo, v))
 
     /**
-     * Magnetic attraction (18 Oct 2026). Two things drawn together: an unhurried start,
-     * a pull that strengthens as the gap closes, then contact with a soft, damped settle
-     * (a 1.2% overshoot that dies away) rather than a hard stop.
+     * Soft-close attraction (18 Oct 2026, replaces the first magnetIn). A fusion of a
+     * magnet and a soft-close damper: the pull strengthens to a peak at about 59%
+     * (2.0x average speed), then a damper takes over and brings it into contact at 86%
+     * still moving gently (0.29x), carrying into a 0.5% settle that dies to rest.
+     * Speed is continuous everywhere; the first version dropped from 2.9x to 0.3x in
+     * one step at contact, which reads as a hard stop.
+     * Speed before contact: (12 - 3k) v^2 (1 - v) + k v^3, integrated below.
      */
     fun magnetIn(u: Float): Float {
         val c = clamp(u)
-        val contact = 0.88f
+        val contact = 0.86f
+        val k = 0.25f
         if (c < contact) {
             val v = c / contact
-            return v * v * (0.35f + 0.65f * v)
+            val v3 = v * v * v
+            return (12f - 3f * k) * (v3 / 3f - v3 * v / 4f) + k * v3 * v / 4f
         }
         val w = (c - contact) / (1f - contact)
-        return 1f + 0.012f * kotlin.math.sin(Math.PI.toFloat() * w) * (1f - w)
+        val amp = k * (1f - contact) / (contact * Math.PI.toFloat())
+        return 1f + amp * kotlin.math.sin(Math.PI.toFloat() * w) * (1f - w) * (1f - w)
     }
 
     /**
