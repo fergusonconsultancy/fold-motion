@@ -447,15 +447,27 @@ class FoldOverlayView(context: Context) : View(context) {
             val field = 0.22f * FoldMath.smooth(FoldMath.clamp((r - 0.5f) / 0.05f)) * (1f - gA)
             if (field > 0.004f) greenBand(canvas, cx, 0f, h, w * (0.05f + 0.25f * gA), field, 0f, w + 1f)
         }
-        // As the halves begin to part, their champagne lips flare once
         // The halves are held magnetically: they cling, give, then glide apart
         val eA = FoldMath.magnetOut(FoldMath.clamp((r - 0.5f) / 0.45f))
         val eB = FoldMath.magnetOut(FoldMath.clamp((r - 0.55f) / 0.42f))
-        val flare = FoldMath.smooth(FoldMath.clamp((r - 0.48f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.58f) / 0.16f)))
-        if (flare > 0f) {
+        // Break-away (18 Oct 2026): light charges while the halves cling and bursts at the
+        // instant the hold gives, so the impact comes from light, not speed. Before, the
+        // flare peaked during the cling and had faded by the break.
+        val breakR = MotionConfig.SIGNATURE_BREAK_R
+        val charge = FoldMath.smooth(FoldMath.clamp((r - 0.46f) / (breakR - 0.46f)))
+        val burst = charge * (1f - FoldMath.smooth(FoldMath.clamp((r - breakR) / 0.16f)))
+        if (burst > 0.004f) {
+            // The burst in the gap: a wide green bloom, a champagne glow, a hot core
+            greenBand(canvas, cx, 0f, h, w * 0.45f, 0.45f * burst, 0f, w + 1f)
+            band(canvas, cx, 0f, h, w * 0.2f, 0.4f * burst)
+            band(canvas, cx, 0f, h, w * 0.05f, burst)
+        }
+        // The champagne lips carry the light outwards, fading as they travel
+        val lip = charge * (1f - FoldMath.smooth(FoldMath.clamp((r - breakR) / 0.3f)))
+        if (lip > 0.004f) {
             for (x in floatArrayOf(cx + (w - cx) * eA, cx - cx * eB)) {
-                band(canvas, x, 0f, h, w * 0.06f, 0.7f * flare)
-                seamPaint.alpha = (255 * flare).toInt()
+                band(canvas, x, 0f, h, w * 0.07f, 0.8f * lip)
+                seamPaint.alpha = (255 * lip).toInt()
                 canvas.drawRect(x - 1.5f, 0f, x + 1.5f, h, seamPaint)
             }
         }

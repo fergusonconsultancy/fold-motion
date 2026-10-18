@@ -63,6 +63,13 @@ class Haptics(private val context: Context) {
         else VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
     )
 
+    /** Opening: a light, crisp click as Signature's halves break their hold. */
+    fun release() = play(
+        if (primitives) VibrationEffect.startComposition()
+            .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.55f).compose()
+        else VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+    )
+
     private fun play(effect: VibrationEffect) {
         val v = vibrator ?: return
         if (!enabled || !v.hasVibrator()) return

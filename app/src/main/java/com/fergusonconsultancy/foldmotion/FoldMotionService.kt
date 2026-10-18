@@ -98,6 +98,7 @@ class FoldMotionService : Service(), SensorEventListener {
         }
     }
     private var firstRevealFrameLogged = false
+    private var releaseDone = false
     /** Opening onto the lock screen: give up if it is not unlocked within this window. */
     private val unlockDeadline = Runnable {
         if (phase == Phase.AWAIT_UNLOCK) {
@@ -600,6 +601,7 @@ class FoldMotionService : Service(), SensorEventListener {
         stats.reset()
         overlay?.drawCount = 0
         firstRevealFrameLogged = false
+        releaseDone = false
         if (isInteractive()) haptics.settle()
         Status.mark(this, Status.PLAYED)
         enter(Phase.REVEALING)
@@ -700,6 +702,10 @@ class FoldMotionService : Service(), SensorEventListener {
                 val k = FoldMath.clamp(elapsed() / revealMs)
                 view.show(1f - FoldMath.glide(k))
                 stats.onFrame(frameTimeNanos)
+                if (!releaseDone && MotionConfig.OPENING_EFFECT == MotionConfig.Effect.SIGNATURE &&
+                    FoldMath.glide(k) >= MotionConfig.SIGNATURE_BREAK_R) {
+                    releaseDone = true; haptics.release()
+                }
                 if (k >= 1f) {
                     val r = stats.result()
                     EventLog.add(
