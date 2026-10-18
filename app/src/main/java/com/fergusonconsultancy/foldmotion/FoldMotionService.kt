@@ -108,6 +108,20 @@ class FoldMotionService : Service(), SensorEventListener {
     private var lastOpenStepAt = 0L
     private var lastInnerSwitchAt = 0L
 
+    // The closing plan: build-up until finaleAt, then the finale from finaleFromP to black
+    private var finaleAt = 0f
+    private var finaleMs = MotionConfig.FINALE_MS.toFloat()
+    private var finaleFromP = MotionConfig.BUILD_END
+
+    /** Closing progress at t ms into the effect, following the plan. */
+    private fun planP(t: Float): Float =
+        if (t < finaleAt) {
+            MotionConfig.BUILD_END * FoldMath.glide(FoldMath.clamp(t / finaleAt.coerceAtLeast(1f)))
+        } else {
+            val u = FoldMath.clamp((t - finaleAt) / finaleMs)
+            finaleFromP + (1f - finaleFromP) * (1f - (1f - u) * (1f - u))
+        }
+
     // Fold posture from Jetpack WindowManager. FLAT to HALF_OPENED is the moment a close
     // begins, well before the coarse hinge sensor reports 90 degrees, and on fast closes
     // the hinge sensor sometimes reported only after One UI had already switched (16 Oct).
@@ -460,6 +474,15 @@ class FoldMotionService : Service(), SensorEventListener {
             phase == Phase.ARMED && closing -> finish()
             // Closing the inner screen
             phase == Phase.IDLE && innerNow && closing && !bounce -> startClose(now, scale)
+            // This close is quicker than usual: the hinge says closed while still building up,
+            // so go straight to the finale from wherever the build-up has reached
+            phase == Phase.PLAYING && closing && angle <= 1f && elapsed() < finaleAt -> {
+                val t = elapsed()
+                finaleFromP = planP(t)
+                finaleAt = t
+                playMs = finaleAt + finaleMs
+                EventLog.add(this, "Hinge reported closed ${t.roundToInt()}ms in: straight to the finale")
+            }
             // Opened back up mid-fold: let the blades go
             (phase == Phase.PLAYING || phase == Phase.HOLDING) && currentInner && !closing -> {
                 fadeFrom = currentProgress()
@@ -487,7 +510,7 @@ class FoldMotionService : Service(), SensorEventListener {
     private fun elapsed() = (SystemClock.uptimeMillis() - phaseAt).toFloat()
 
     private fun currentProgress(): Float = when (phase) {
-        Phase.PLAYING -> FoldMath.glide(FoldMath.clamp(elapsed() / playMs))
+        Phase.PLAYING -> planP(elapsed())
         Phase.HOLDING -> 1f
         else -> 0f
     }
@@ -509,8 +532,19 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private fun startClose(now: Long, scale: Float) {
         overlay?.mode = FoldOverlayView.Mode.CLOSE
-        // Fitted to this owner's closing speed once enough closes are learned
-        playMs = Timing.fittedMs(this, MotionConfig.EFFECT_MS * scale)
+        // Planned backwards from when this owner's closes usually switch to the cover:
+        // the finale always gets its full length and lands just before the switch
+        val predicted = Timing.predictedSwitchMs(this)
+        val plan = Plan.make(predicted?.let { it }, scale)
+        finaleAt = plan.buildMs
+        finaleMs = plan.finaleMs
+        finaleFromP = MotionConfig.BUILD_END
+        playMs = finaleAt + finaleMs
+        EventLog.add(
+            this,
+            "Closing planned: build-up ${finaleAt.roundToInt()}ms, finale ${finaleMs.roundToInt()}ms" +
+                (predicted?.let { ", switch expected at ${it.roundToInt()}ms" } ?: ", still learning your switch timing")
+        )
         playStartAt = now
         stats.reset()
         overlay?.drawCount = 0
@@ -618,8 +652,8 @@ class FoldMotionService : Service(), SensorEventListener {
         when (phase) {
             Phase.IDLE -> { finish(); return }
             Phase.PLAYING -> {
-                val k = FoldMath.clamp(t / playMs)
-                val p = FoldMath.glide(k)
+                val p = planP(t)
+                val k = if (t >= finaleAt + finaleMs) 1f else 0f
                 view.show(p)
                 stats.onFrame(frameTimeNanos)
                 // Haptics timed to the light: tick as the blades start, click on the pulse

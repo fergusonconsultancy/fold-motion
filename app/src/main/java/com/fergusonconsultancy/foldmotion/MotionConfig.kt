@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 18 Oct 2026: closing planned backwards from the predicted switch (fixed finale, elastic build-up).
  * 18 Oct 2026: Arch Aperture made a grand closing (lacquer curtains, champagne rim, seal flash, last point of light).
  * 18 Oct 2026: Signature made grander (800ms, bigger ignition, brighter flood fronts, lip flare).
  * 16 Oct 2026 (late): opening Signature (champagne seam, lacquer flood, reflection, parting); Hinge Shade rejected.
@@ -43,8 +44,19 @@ object MotionConfig {
      */
     const val NAVE_LIFT_START = 0.6f
 
-    /** Closing effect length before Animator duration scale. */
+    /** Closing effect length before Animator duration scale, when there is time for all of it. */
     const val EFFECT_MS = 900L
+
+    /**
+     * Closing is planned backwards from the predicted switch (18 Oct 2026). The finale,
+     * from BUILD_END to black (the seal and the last point of light), always gets
+     * FINALE_MS and ends SWITCH_SAFETY_MS before the switch is expected. The build-up
+     * (0 to BUILD_END) gets what is left, never less than MIN_BUILD_MS.
+     */
+    const val FINALE_MS = 300L
+    const val BUILD_END = 0.55f
+    const val SWITCH_SAFETY_MS = 40L
+    const val MIN_BUILD_MS = 60L
 
     /**
      * Opening reveal length before Animator duration scale. Taps are ignored while it
