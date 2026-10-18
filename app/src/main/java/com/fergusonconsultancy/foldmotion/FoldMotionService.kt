@@ -702,8 +702,12 @@ class FoldMotionService : Service(), SensorEventListener {
                 val k = FoldMath.clamp(elapsed() / revealMs)
                 view.show(1f - FoldMath.glide(k))
                 stats.onFrame(frameTimeNanos)
-                if (!releaseDone && MotionConfig.OPENING_EFFECT == MotionConfig.Effect.SIGNATURE &&
-                    k >= MotionConfig.SIGNATURE_BREAK_T) {
+                val clickAt = when (MotionConfig.OPENING_EFFECT) {
+                    MotionConfig.Effect.SIGNATURE -> MotionConfig.SIGNATURE_BREAK_T
+                    MotionConfig.Effect.FRAME_OF_LIGHT -> MotionConfig.FRAME_SEAT_T
+                    else -> 2f
+                }
+                if (!releaseDone && k >= clickAt) {
                     releaseDone = true; haptics.release()
                 }
                 if (k >= 1f) {
@@ -758,7 +762,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Arch Aperture closing, Signature opening")
+            .setContentText("Arch Aperture closing, Frame of Light opening")
             .setOngoing(true)
             .build()
 

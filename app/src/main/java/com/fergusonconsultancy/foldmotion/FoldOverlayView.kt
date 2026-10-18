@@ -169,6 +169,13 @@ class FoldOverlayView(context: Context) : View(context) {
     private val glintShader = unitRadial(Color.rgb(255, 246, 228))
     private val glintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glintShader }
 
+    // ---- Frame of Light
+    private val framePath = Path().apply { fillType = Path.FillType.EVEN_ODD }
+    private val frameRect = android.graphics.RectF()
+    private val frameStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val frameGlowShader = unitRadial(Color.rgb(40, 200, 110))
+    private val frameGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = frameGlowShader }
+
     // ---- Arch Aperture
     private val archPath = Path()
     private val maskPath = Path().apply { fillType = Path.FillType.EVEN_ODD }
@@ -302,6 +309,7 @@ class FoldOverlayView(context: Context) : View(context) {
             MotionConfig.Effect.ARCH_APERTURE -> drawArchAperture(canvas, w, h)
             MotionConfig.Effect.HINGE_SHADE -> drawHingeShade(canvas, w, h)
             MotionConfig.Effect.SIGNATURE -> drawSignature(canvas, w, h)
+            MotionConfig.Effect.FRAME_OF_LIGHT -> drawFrameOfLight(canvas, w, h)
         }
 
         canvas.restoreToCount(flip)
@@ -404,6 +412,16 @@ class FoldOverlayView(context: Context) : View(context) {
      * right; then the champagne-edged halves part to show the screen.
      */
     private fun drawSignature(canvas: Canvas, w: Float, h: Float) {
+        signatureBase(canvas, w, h)
+        drawSignatureParting(canvas, w, h)
+    }
+
+    /**
+     * Signature's first beats, shared with Frame of Light: the lacquer floods from the
+     * hinge with lit fronts, and the seam ignites. partA and partB override how far the
+     * halves have parted (NaN: Signature's own parting, on real time).
+     */
+    private fun signatureBase(canvas: Canvas, w: Float, h: Float, partA: Float = Float.NaN, partB: Float = Float.NaN) {
         val r = 1f - p
         val cx = w / 2f
         val flood = FoldMath.glide(FoldMath.clamp((r - 0.05f) / 0.24f))
@@ -411,7 +429,7 @@ class FoldOverlayView(context: Context) : View(context) {
         if (flood > 0f) {
             val c = canvas.save()
             if (flood < 1f) canvas.clipRect(cx - spread, 0f, cx + spread, h)
-            drawLacquerPanel(canvas, w, h, fromBlack = false, partOnTime = true)
+            drawLacquerPanel(canvas, w, h, fromBlack = false, partOnTime = true, partA = partA, partB = partB)
             canvas.restoreToCount(c)
         }
         // Black beyond the flood
@@ -441,6 +459,11 @@ class FoldOverlayView(context: Context) : View(context) {
             seamPaint.alpha = (255 * seam).toInt()
             canvas.drawRect(cx - 2.5f, 0f, cx + 2.5f, h, seamPaint)
         }
+    }
+
+    private fun drawSignatureParting(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
+        val cx = w / 2f
         // From here, real time: the reveal's ease squeezes its middle, which made the
         // cling about 45ms and the light a 120ms flash (18 Oct 2026, night).
         val t = FoldMath.unglide(r)
@@ -469,6 +492,99 @@ class FoldOverlayView(context: Context) : View(context) {
                 band(canvas, x, 0f, h, w * 0.07f, 0.6f * lip)
                 seamPaint.alpha = (200 * lip).toInt()
                 canvas.drawRect(x - 1.5f, 0f, x + 1.5f, h, seamPaint)
+            }
+        }
+    }
+
+    // endregion
+
+    // region Frame of Light (opening)
+
+    /**
+     * Signature, Frame of Light (18 Oct 2026, chosen in Studio). Ends on its climax, as the
+     * grand closing does. The seam ignites and the lacquer floods as in Signature; light
+     * gathers while the halves cling; they part on real time and stop a bezel short of the
+     * edges, leaving a Visconti lacquer frame with a champagne inner lip around the content.
+     * Its corners close with a glint, it holds, then slides off every edge. Nothing remains.
+     */
+    private fun drawFrameOfLight(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
+        val cx = w / 2f
+        val t = FoldMath.unglide(r)
+        val hold = MotionConfig.FRAME_HOLD_T
+        val bezel = w * 0.042f
+        val b = bezel * (1f - FoldMath.glide(FoldMath.clamp((t - hold) / (1f - hold))))
+        val mA = FoldMath.magnetOut(FoldMath.clamp((t - 0.42f) / 0.34f))
+        val mB = FoldMath.magnetOut(FoldMath.clamp((t - 0.46f) / 0.32f))
+        val xa = cx + (w - b - cx) * mA
+        val xb = cx - (cx - b) * mB
+        val eA = (xa - cx) / (w - cx)
+        val eB = (cx - xb) / cx
+        if (xa - xb <= 1.5f) {
+            signatureBase(canvas, w, h, eA, eB)
+        } else {
+            // The bezel's top and bottom settle in as the window opens
+            val top = b * FoldMath.smooth(FoldMath.clamp((xa - xb) / (w * 0.25f)))
+            val rad = min(w * 0.05f, min((xa - xb) / 2f, (h - 2f * top) / 2f))
+            frameRect.set(xb, top, xa, h - top)
+            framePath.reset()
+            framePath.addRect(0f, 0f, w + 1f, h, Path.Direction.CW)
+            framePath.addRoundRect(frameRect, rad, rad, Path.Direction.CW)
+            val c0 = canvas.save()
+            canvas.clipPath(framePath)
+            signatureBase(canvas, w, h, eA, eB)
+            if (top > 0.5f) {
+                // Same paint as the halves: dark at the outer edge, champagne at the inner lip
+                m.setScale(top, 1f); m.postRotate(90f)
+                lacquerPanelShader.setLocalMatrix(m)
+                canvas.drawRect(0f, 0f, w + 1f, top, lacquerPanelPaint)
+                m.setScale(top, 1f); m.postRotate(-90f); m.postTranslate(0f, h)
+                lacquerPanelShader.setLocalMatrix(m)
+                canvas.drawRect(0f, h - top, w + 1f, h, lacquerPanelPaint)
+                flakePaint.alpha = (255 * 0.16f).toInt()
+                canvas.drawRect(0f, 0f, w + 1f, top, flakePaint)
+                canvas.drawRect(0f, h - top, w + 1f, h, flakePaint)
+            }
+            canvas.restoreToCount(c0)
+            // The champagne inner lip, with a green halo spilling onto the content
+            val lit = FoldMath.smooth(FoldMath.clamp((min(mA, mB) - 0.6f) / 0.4f))
+            val fade = b / bezel
+            framePath.reset()
+            framePath.addRoundRect(frameRect, rad, rad, Path.Direction.CW)
+            frameStroke.color = Color.rgb(40, 200, 110)
+            frameStroke.alpha = (255 * 0.45f * lit * fade).toInt()
+            frameStroke.strokeWidth = w * 0.022f
+            if (frameStroke.alpha > 0) canvas.drawPath(framePath, frameStroke)
+            frameStroke.color = Color.rgb(255, 246, 228)
+            frameStroke.alpha = (255 * (0.6f + 0.4f * lit) * min(1f, fade * 1.5f)).toInt()
+            frameStroke.strokeWidth = max(1.5f, w * 0.0035f)
+            if (frameStroke.alpha > 0) canvas.drawPath(framePath, frameStroke)
+        }
+        // Light gathers through the cling and crests as the hold gives
+        val bt = MotionConfig.FRAME_BREAK_T
+        val charge = FoldMath.smooth(FoldMath.clamp((t - 0.3f) / (bt - 0.3f)))
+        val glow = charge * (1f - FoldMath.smooth(FoldMath.clamp((t - bt) / 0.22f)))
+        if (glow > 0.004f) {
+            greenBand(canvas, cx, 0f, h, w * 0.5f, 0.4f * glow, 0f, w + 1f)
+            band(canvas, cx, 0f, h, w * 0.22f, 0.28f * glow)
+            band(canvas, cx, 0f, h, w * 0.035f, 0.5f * glow)
+        }
+        // The frame closes: a glint at each corner as the halves seat
+        val cg = FoldMath.smooth(FoldMath.clamp((min(mA, mB) - 0.9f) / 0.1f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.8f) / 0.1f)))
+        if (cg > 0.004f) {
+            for (i in 0..3) {
+                val x = if (i % 2 == 0) b else w - b
+                val y = if (i < 2) b else h - b
+                val halo = w * 0.12f
+                m.setScale(halo, halo); m.postTranslate(x, y)
+                frameGlowShader.setLocalMatrix(m)
+                frameGlowPaint.alpha = (255 * 0.28f * cg).toInt()
+                canvas.drawRect(x - halo, y - halo, x + halo, y + halo, frameGlowPaint)
+                val core = w * 0.045f
+                m.setScale(core, core); m.postTranslate(x, y)
+                glintShader.setLocalMatrix(m)
+                glintPaint.alpha = (255 * 0.8f * cg).toInt()
+                canvas.drawRect(x - core, y - core, x + core, y + core, glintPaint)
             }
         }
     }
@@ -548,14 +664,17 @@ class FoldOverlayView(context: Context) : View(context) {
      * Visconti paint with flake and lacquer; a clear-coat reflection sweeps left to
      * right; the panel splits at the crease and the halves part. Black at p = 1.
      */
-    private fun drawLacquerPanel(canvas: Canvas, w: Float, h: Float, fromBlack: Boolean = true, partOnTime: Boolean = false) {
+    private fun drawLacquerPanel(
+        canvas: Canvas, w: Float, h: Float, fromBlack: Boolean = true, partOnTime: Boolean = false,
+        partA: Float = Float.NaN, partB: Float = Float.NaN
+    ) {
         val r = 1f - p
         val cx = w / 2f
         // The halves are held magnetically: they cling, give, then glide apart.
         // Signature parts on real time, so the cling lasts long enough to be felt.
         val pr = if (partOnTime) FoldMath.unglide(r) else r
-        val eA = FoldMath.magnetOut(FoldMath.clamp((pr - 0.5f) / 0.45f))
-        val eB = FoldMath.magnetOut(FoldMath.clamp((pr - 0.55f) / 0.42f))
+        val eA = if (partA.isNaN()) FoldMath.magnetOut(FoldMath.clamp((pr - 0.5f) / 0.45f)) else partA
+        val eB = if (partB.isNaN()) FoldMath.magnetOut(FoldMath.clamp((pr - 0.55f) / 0.42f)) else partB
         val xa = cx + (w - cx) * eA
         val xb = cx - cx * eB
         lacquerHalf(canvas, xa, w + 1f, xa, h)

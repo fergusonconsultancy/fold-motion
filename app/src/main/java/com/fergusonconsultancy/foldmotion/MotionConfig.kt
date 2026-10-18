@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 18 Oct 2026 (night): opening Frame of Light, chosen in Studio: closingEffect "aperture", openingEffect "frame", finish "visconti", effectMs 900, revealMs 1000, previewed at 1x.
  * 18 Oct 2026 (late): soft-close attraction on closing, rounded release on opening, Signature break-away glow and haptic, parting on real time.
  * 18 Oct 2026: magnetic motion curves (attraction on closing, cling and release on opening), opening 1000ms.
  * 18 Oct 2026: closing planned backwards from the predicted switch (fixed finale, elastic build-up).
@@ -24,7 +25,7 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT }
 
     /**
      * Closing effect. Arch Aperture since 16 Oct 2026 (night), chosen in Studio: the
@@ -37,7 +38,7 @@ object MotionConfig {
      * Hinge Shade, Lacquer Panel, Arch Aperture, Crease Split and Nave of Light were
      * tried before it.
      */
-    val OPENING_EFFECT = Effect.SIGNATURE
+    val OPENING_EFFECT = Effect.FRAME_OF_LIGHT
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
@@ -73,6 +74,15 @@ object MotionConfig {
      * The glow crests and a light haptic click plays here: 590ms into a 1000ms reveal.
      */
     const val SIGNATURE_BREAK_T = 0.5f + 0.2f * 0.45f
+
+    /**
+     * Frame of Light, as shares of the reveal's time. The halves part from 0.42 over 0.34,
+     * so the hold gives at 0.488 (the glow crests); the bezel seats at 0.735 (the haptic
+     * click, mirroring the closing's click at contact); it holds until 0.84, then slides away.
+     */
+    const val FRAME_BREAK_T = 0.42f + 0.2f * 0.34f
+    const val FRAME_SEAT_T = 0.735f
+    const val FRAME_HOLD_T = 0.84f
 
     /** Closing stages, as shares of eased progress (0 to 1). Rules draw from 0. */
     const val PLANE_START = 0.20f
