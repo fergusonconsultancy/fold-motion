@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 18 Oct 2026: magnetic motion curves (attraction on closing, cling and release on opening), opening 1000ms.
  * 18 Oct 2026: closing planned backwards from the predicted switch (fixed finale, elastic build-up).
  * 18 Oct 2026: Arch Aperture made a grand closing (lacquer curtains, champagne rim, seal flash, last point of light).
  * 18 Oct 2026: Signature made grander (800ms, bigger ignition, brighter flood fronts, lip flare).
@@ -60,9 +61,10 @@ object MotionConfig {
 
     /**
      * Opening reveal length before Animator duration scale. Taps are ignored while it
-     * plays. 800ms since 18 Oct 2026 so Signature's four acts can land (was 650ms).
+     * plays. 1000ms since 18 Oct 2026 (magnetic motion, slowed as far as is sensible;
+     * was 800ms, 650ms before that).
      */
-    const val REVEAL_MS = 800L
+    const val REVEAL_MS = 1000L
 
     /** Closing stages, as shares of eased progress (0 to 1). Rules draw from 0. */
     const val PLANE_START = 0.20f

@@ -8,6 +8,33 @@ import kotlin.math.pow
 object FoldMath {
     fun clamp(v: Float, lo: Float = 0f, hi: Float = 1f): Float = min(hi, max(lo, v))
 
+    /**
+     * Magnetic attraction (18 Oct 2026). Two things drawn together: an unhurried start,
+     * a pull that strengthens as the gap closes, then contact with a soft, damped settle
+     * (a 1.2% overshoot that dies away) rather than a hard stop.
+     */
+    fun magnetIn(u: Float): Float {
+        val c = clamp(u)
+        val contact = 0.88f
+        if (c < contact) {
+            val v = c / contact
+            return v * v * (0.35f + 0.65f * v)
+        }
+        val w = (c - contact) / (1f - contact)
+        return 1f + 0.012f * kotlin.math.sin(Math.PI.toFloat() * w) * (1f - w)
+    }
+
+    /**
+     * Magnetic release: two things held together. They cling first (a slight creep as the
+     * hold gives), break away, then glide to rest. The opposite of magnetIn.
+     */
+    fun magnetOut(u: Float): Float {
+        val c = clamp(u)
+        val hold = 0.2f
+        if (c < hold) return 0.035f * smooth(c / hold)
+        return 0.035f + 0.965f * glide((c - hold) / (1f - hold))
+    }
+
     /** Smoothstep. */
     fun smooth(t: Float): Float = t * t * (3f - 2f * t)
 

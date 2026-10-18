@@ -116,10 +116,12 @@ class FoldMotionService : Service(), SensorEventListener {
     /** Closing progress at t ms into the effect, following the plan. */
     private fun planP(t: Float): Float =
         if (t < finaleAt) {
-            MotionConfig.BUILD_END * FoldMath.glide(FoldMath.clamp(t / finaleAt.coerceAtLeast(1f)))
+            // Drawn in by magnetic attraction: unhurried, then a strengthening pull, then contact
+            MotionConfig.BUILD_END * FoldMath.magnetIn(FoldMath.clamp(t / finaleAt.coerceAtLeast(1f)))
         } else {
             val u = FoldMath.clamp((t - finaleAt) / finaleMs)
-            finaleFromP + (1f - finaleFromP) * (1f - (1f - u) * (1f - u))
+            // The finale settles rather than stops: smoothstep, so it eases out to black
+            finaleFromP + (1f - finaleFromP) * FoldMath.smooth(u)
         }
 
     // Fold posture from Jetpack WindowManager. FLAT to HALF_OPENED is the moment a close

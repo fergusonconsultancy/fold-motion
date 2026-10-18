@@ -441,9 +441,16 @@ class FoldOverlayView(context: Context) : View(context) {
             seamPaint.alpha = (255 * seam).toInt()
             canvas.drawRect(cx - 2.5f, 0f, cx + 2.5f, h, seamPaint)
         }
+        // The field between the parting halves: a faint green glow that thins as the gap widens
+        run {
+            val gA = FoldMath.magnetOut(FoldMath.clamp((r - 0.5f) / 0.45f))
+            val field = 0.22f * FoldMath.smooth(FoldMath.clamp((r - 0.5f) / 0.05f)) * (1f - gA)
+            if (field > 0.004f) greenBand(canvas, cx, 0f, h, w * (0.05f + 0.25f * gA), field, 0f, w + 1f)
+        }
         // As the halves begin to part, their champagne lips flare once
-        val eA = FoldMath.glide(FoldMath.clamp((r - 0.5f) / 0.45f))
-        val eB = FoldMath.glide(FoldMath.clamp((r - 0.55f) / 0.42f))
+        // The halves are held magnetically: they cling, give, then glide apart
+        val eA = FoldMath.magnetOut(FoldMath.clamp((r - 0.5f) / 0.45f))
+        val eB = FoldMath.magnetOut(FoldMath.clamp((r - 0.55f) / 0.42f))
         val flare = FoldMath.smooth(FoldMath.clamp((r - 0.48f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.58f) / 0.16f)))
         if (flare > 0f) {
             for (x in floatArrayOf(cx + (w - cx) * eA, cx - cx * eB)) {
@@ -532,8 +539,9 @@ class FoldOverlayView(context: Context) : View(context) {
     private fun drawLacquerPanel(canvas: Canvas, w: Float, h: Float, fromBlack: Boolean = true) {
         val r = 1f - p
         val cx = w / 2f
-        val eA = FoldMath.glide(FoldMath.clamp((r - 0.5f) / 0.45f))
-        val eB = FoldMath.glide(FoldMath.clamp((r - 0.55f) / 0.42f))
+        // The halves are held magnetically: they cling, give, then glide apart
+        val eA = FoldMath.magnetOut(FoldMath.clamp((r - 0.5f) / 0.45f))
+        val eB = FoldMath.magnetOut(FoldMath.clamp((r - 0.55f) / 0.42f))
         val xa = cx + (w - cx) * eA
         val xb = cx - cx * eB
         lacquerHalf(canvas, xa, w + 1f, xa, h)
@@ -599,7 +607,8 @@ class FoldOverlayView(context: Context) : View(context) {
         val r = 1f - p
         val cx = w / 2f
         val cy = h / 2f
-        val o = FoldMath.glide(FoldMath.clamp((r - 0.42f) / 0.5f))
+        // Linear here: the magnetic curve is applied by the closing plan, not twice
+        val o = FoldMath.clamp((r - 0.42f) / 0.5f)
         val a = o * w * 0.8f
         val e = h * 0.25f
         // Outside the arch: curtains of Visconti lacquer (a grand closing; 18 Oct 2026)
@@ -629,7 +638,8 @@ class FoldOverlayView(context: Context) : View(context) {
                 canvas.drawPath(archPath, archStroke)
                 canvas.restoreToCount(c)
                 archStroke.color = Color.rgb(40, 200, 110)
-                archStroke.alpha = (255 * 0.32f * rim).toInt()
+                // The field strengthens as the arch closes on the crease
+                archStroke.alpha = (255 * min(0.6f, 0.32f * rim * (0.6f + 0.9f * (1f - o)))).toInt()
                 archStroke.strokeWidth = w * 0.025f
                 canvas.drawPath(archPath, archStroke)
                 archStroke.color = Color.rgb(255, 244, 222)
