@@ -45,6 +45,17 @@ object FoldMath {
         return 0.035f + 0.965f * (t * t * t * (t * (6f * t - 15f) + 10f))
     }
 
+    /**
+     * The inverse of glide: given eased progress, the share of time elapsed. The opening
+     * reveal runs through glide, which squeezes its middle; Signature's parting and its
+     * light use real time so the cling and the glow are not squeezed with it.
+     */
+    fun unglide(r: Float): Float {
+        val c = clamp(r)
+        return if (c < 0.5f) Math.cbrt((c / 4f).toDouble()).toFloat()
+        else 1f - Math.cbrt((2f * (1f - c)).toDouble()).toFloat() / 2f
+    }
+
     /** Smoothstep. */
     fun smooth(t: Float): Float = t * t * (3f - 2f * t)
 

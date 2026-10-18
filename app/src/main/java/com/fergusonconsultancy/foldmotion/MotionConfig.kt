@@ -1,7 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
- * 18 Oct 2026 (late): soft-close attraction on closing, rounded release on opening, Signature break-away burst and haptic.
+ * 18 Oct 2026 (late): soft-close attraction on closing, rounded release on opening, Signature break-away glow and haptic, parting on real time.
  * 18 Oct 2026: magnetic motion curves (attraction on closing, cling and release on opening), opening 1000ms.
  * 18 Oct 2026: closing planned backwards from the predicted switch (fixed finale, elastic build-up).
  * 18 Oct 2026: Arch Aperture made a grand closing (lacquer curtains, champagne rim, seal flash, last point of light).
@@ -68,11 +68,11 @@ object MotionConfig {
     const val REVEAL_MS = 1000L
 
     /**
-     * Signature: reveal progress at which the halves break their magnetic hold
-     * (the parting starts at 0.5 over 0.45, and the cling is the first 20% of it).
-     * The light bursts and a light haptic click plays here.
+     * Signature: share of the reveal's time at which the halves break their magnetic
+     * hold (the parting starts at 0.5 over 0.45, and the cling is the first 20% of it).
+     * The glow crests and a light haptic click plays here: 590ms into a 1000ms reveal.
      */
-    const val SIGNATURE_BREAK_R = 0.5f + 0.2f * 0.45f
+    const val SIGNATURE_BREAK_T = 0.5f + 0.2f * 0.45f
 
     /** Closing stages, as shares of eased progress (0 to 1). Rules draw from 0. */
     const val PLANE_START = 0.20f

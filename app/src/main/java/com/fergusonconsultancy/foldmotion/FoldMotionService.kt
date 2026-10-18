@@ -703,7 +703,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 view.show(1f - FoldMath.glide(k))
                 stats.onFrame(frameTimeNanos)
                 if (!releaseDone && MotionConfig.OPENING_EFFECT == MotionConfig.Effect.SIGNATURE &&
-                    FoldMath.glide(k) >= MotionConfig.SIGNATURE_BREAK_R) {
+                    k >= MotionConfig.SIGNATURE_BREAK_T) {
                     releaseDone = true; haptics.release()
                 }
                 if (k >= 1f) {

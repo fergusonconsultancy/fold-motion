@@ -411,7 +411,7 @@ class FoldOverlayView(context: Context) : View(context) {
         if (flood > 0f) {
             val c = canvas.save()
             if (flood < 1f) canvas.clipRect(cx - spread, 0f, cx + spread, h)
-            drawLacquerPanel(canvas, w, h, fromBlack = false)
+            drawLacquerPanel(canvas, w, h, fromBlack = false, partOnTime = true)
             canvas.restoreToCount(c)
         }
         // Black beyond the flood
@@ -441,33 +441,33 @@ class FoldOverlayView(context: Context) : View(context) {
             seamPaint.alpha = (255 * seam).toInt()
             canvas.drawRect(cx - 2.5f, 0f, cx + 2.5f, h, seamPaint)
         }
+        // From here, real time: the reveal's ease squeezes its middle, which made the
+        // cling about 45ms and the light a 120ms flash (18 Oct 2026, night).
+        val t = FoldMath.unglide(r)
         // The field between the parting halves: a faint green glow that thins as the gap widens
+        val eA = FoldMath.magnetOut(FoldMath.clamp((t - 0.5f) / 0.45f))
+        val eB = FoldMath.magnetOut(FoldMath.clamp((t - 0.55f) / 0.42f))
         run {
-            val gA = FoldMath.magnetOut(FoldMath.clamp((r - 0.5f) / 0.45f))
-            val field = 0.22f * FoldMath.smooth(FoldMath.clamp((r - 0.5f) / 0.05f)) * (1f - gA)
-            if (field > 0.004f) greenBand(canvas, cx, 0f, h, w * (0.05f + 0.25f * gA), field, 0f, w + 1f)
+            val field = 0.22f * FoldMath.smooth(FoldMath.clamp((t - 0.5f) / 0.05f)) * (1f - eA)
+            if (field > 0.004f) greenBand(canvas, cx, 0f, h, w * (0.05f + 0.25f * eA), field, 0f, w + 1f)
         }
-        // The halves are held magnetically: they cling, give, then glide apart
-        val eA = FoldMath.magnetOut(FoldMath.clamp((r - 0.5f) / 0.45f))
-        val eB = FoldMath.magnetOut(FoldMath.clamp((r - 0.55f) / 0.42f))
-        // Break-away (18 Oct 2026): light charges while the halves cling and bursts at the
-        // instant the hold gives, so the impact comes from light, not speed. Before, the
-        // flare peaked during the cling and had faded by the break.
-        val breakR = MotionConfig.SIGNATURE_BREAK_R
-        val charge = FoldMath.smooth(FoldMath.clamp((r - 0.46f) / (breakR - 0.46f)))
-        val burst = charge * (1f - FoldMath.smooth(FoldMath.clamp((r - breakR) / 0.16f)))
-        if (burst > 0.004f) {
-            // The burst in the gap: a wide green bloom, a champagne glow, a hot core
-            greenBand(canvas, cx, 0f, h, w * 0.45f, 0.45f * burst, 0f, w + 1f)
-            band(canvas, cx, 0f, h, w * 0.2f, 0.4f * burst)
-            band(canvas, cx, 0f, h, w * 0.05f, burst)
+        // Break-away: a glow, not a flash. Light gathers slowly through the cling (about
+        // 190ms), crests as the hold gives, and ebbs over about 260ms. Colour carries it:
+        // a wide Visconti bloom and a champagne glow, with only a narrow, soft core.
+        val breakT = MotionConfig.SIGNATURE_BREAK_T
+        val charge = FoldMath.smooth(FoldMath.clamp((t - 0.40f) / (breakT - 0.40f)))
+        val glow = charge * (1f - FoldMath.smooth(FoldMath.clamp((t - breakT) / 0.26f)))
+        if (glow > 0.004f) {
+            greenBand(canvas, cx, 0f, h, w * 0.5f, 0.4f * glow, 0f, w + 1f)
+            band(canvas, cx, 0f, h, w * 0.22f, 0.28f * glow)
+            band(canvas, cx, 0f, h, w * 0.035f, 0.5f * glow)
         }
         // The champagne lips carry the light outwards, fading as they travel
-        val lip = charge * (1f - FoldMath.smooth(FoldMath.clamp((r - breakR) / 0.3f)))
+        val lip = charge * (1f - FoldMath.smooth(FoldMath.clamp((t - breakT) / 0.32f)))
         if (lip > 0.004f) {
             for (x in floatArrayOf(cx + (w - cx) * eA, cx - cx * eB)) {
-                band(canvas, x, 0f, h, w * 0.07f, 0.8f * lip)
-                seamPaint.alpha = (255 * lip).toInt()
+                band(canvas, x, 0f, h, w * 0.07f, 0.6f * lip)
+                seamPaint.alpha = (200 * lip).toInt()
                 canvas.drawRect(x - 1.5f, 0f, x + 1.5f, h, seamPaint)
             }
         }
@@ -548,12 +548,14 @@ class FoldOverlayView(context: Context) : View(context) {
      * Visconti paint with flake and lacquer; a clear-coat reflection sweeps left to
      * right; the panel splits at the crease and the halves part. Black at p = 1.
      */
-    private fun drawLacquerPanel(canvas: Canvas, w: Float, h: Float, fromBlack: Boolean = true) {
+    private fun drawLacquerPanel(canvas: Canvas, w: Float, h: Float, fromBlack: Boolean = true, partOnTime: Boolean = false) {
         val r = 1f - p
         val cx = w / 2f
-        // The halves are held magnetically: they cling, give, then glide apart
-        val eA = FoldMath.magnetOut(FoldMath.clamp((r - 0.5f) / 0.45f))
-        val eB = FoldMath.magnetOut(FoldMath.clamp((r - 0.55f) / 0.42f))
+        // The halves are held magnetically: they cling, give, then glide apart.
+        // Signature parts on real time, so the cling lasts long enough to be felt.
+        val pr = if (partOnTime) FoldMath.unglide(r) else r
+        val eA = FoldMath.magnetOut(FoldMath.clamp((pr - 0.5f) / 0.45f))
+        val eB = FoldMath.magnetOut(FoldMath.clamp((pr - 0.55f) / 0.42f))
         val xa = cx + (w - cx) * eA
         val xb = cx - cx * eB
         lacquerHalf(canvas, xa, w + 1f, xa, h)
