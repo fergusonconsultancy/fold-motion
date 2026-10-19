@@ -171,7 +171,53 @@ class FoldOverlayView(context: Context) : View(context) {
 
     // ---- Frame of Light
     private val framePath = Path().apply { fillType = Path.FillType.EVEN_ODD }
-    private val frameRect = android.graphics.RectF()
+    // Motes: direction (+1 follows the leading half), speed, start height, rise, size (as Studio)
+    private val moteDir = floatArrayOf(1f, 1f, 1f, 1f, -1f, -1f)
+    private val moteVx = floatArrayOf(1.9f, 1.4f, 2.3f, 1.2f, 1.1f, 1.6f)
+    private val moteY0 = floatArrayOf(0.38f, 0.52f, 0.61f, 0.29f, 0.47f, 0.7f)
+    private val moteVy = floatArrayOf(-0.5f, -0.3f, -0.65f, -0.2f, -0.4f, -0.55f)
+    private val moteSize = floatArrayOf(0.005f, 0.0065f, 0.004f, 0.0045f, 0.005f, 0.004f)
+    private val motePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 248, 232) }
+
+    /**
+     * The window in the bezel: straight sides (the halves' lips), rounded corners, and its
+     * top and bottom drawn as shallow arches, so the bezel is thickest at the corners
+     * (charter rule 3: curved for the living).
+     */
+    private fun archWindow(path: Path, xb: Float, top: Float, xa: Float, h: Float, rad: Float, bow: Float) {
+        val mid = (xa + xb) / 2f
+        path.moveTo(xb, top + rad)
+        path.quadTo(xb, top, xb + rad, top)
+        path.quadTo(mid, top - 2f * bow, xa - rad, top)
+        path.quadTo(xa, top, xa, top + rad)
+        path.lineTo(xa, h - top - rad)
+        path.quadTo(xa, h - top, xa - rad, h - top)
+        path.quadTo(mid, h - top + 2f * bow, xb + rad, h - top)
+        path.quadTo(xb, h - top, xb, h - top - rad)
+        path.close()
+    }
+
+    // Time of day (charter): the effect's light, never the content beneath. Null by day.
+    private var todPaint: Paint? = null
+
+    /** Sets the light for the hour: night warmer and about a third dimmer, evening between. */
+    fun setTimeOfDay(hour: Int) {
+        val (bright, sepia) = when (hour) {
+            in 7..17 -> 1f to 0f
+            in 18..21 -> 0.88f to 0.12f
+            else -> 0.68f to 0.22f
+        }
+        if (sepia == 0f) { todPaint = null; return }
+        val k = 1f - sepia
+        val cm = android.graphics.ColorMatrix(floatArrayOf(
+            k + sepia * 0.393f, sepia * 0.769f, sepia * 0.189f, 0f, 0f,
+            sepia * 0.349f, k + sepia * 0.686f, sepia * 0.168f, 0f, 0f,
+            sepia * 0.272f, sepia * 0.534f, k + sepia * 0.131f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        cm.postConcat(android.graphics.ColorMatrix().apply { setScale(bright, bright, bright, 1f) })
+        todPaint = Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(cm) }
+    }
     private val frameStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val frameGlowShader = unitRadial(Color.rgb(40, 200, 110))
     private val frameGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = frameGlowShader }
@@ -292,6 +338,7 @@ class FoldOverlayView(context: Context) : View(context) {
         val w = (if (mode == Mode.OPEN && contentW > 0) contentW else width).toFloat()
         val h = (if (mode == Mode.OPEN && contentH > 0) contentH else height).toFloat()
         val layer = if (alphaAll < 1f) canvas.saveLayerAlpha(0f, 0f, w, h, (255 * alphaAll).toInt()) else -1
+        val tod = todPaint?.let { canvas.saveLayer(0f, 0f, w, h, it) } ?: -1
 
         // Drawn with the leading edge on the right; mirrored so it moves left to right
         val flip = canvas.save()
@@ -313,6 +360,7 @@ class FoldOverlayView(context: Context) : View(context) {
         }
 
         canvas.restoreToCount(flip)
+        if (tod >= 0) canvas.restoreToCount(tod)
         if (layer >= 0) canvas.restoreToCount(layer)
     }
 
@@ -421,7 +469,7 @@ class FoldOverlayView(context: Context) : View(context) {
      * hinge with lit fronts, and the seam ignites. partA and partB override how far the
      * halves have parted (NaN: Signature's own parting, on real time).
      */
-    private fun signatureBase(canvas: Canvas, w: Float, h: Float, partA: Float = Float.NaN, partB: Float = Float.NaN) {
+    private fun signatureBase(canvas: Canvas, w: Float, h: Float, partA: Float = Float.NaN, partB: Float = Float.NaN, rtl: Boolean = false) {
         val r = 1f - p
         val cx = w / 2f
         val flood = FoldMath.glide(FoldMath.clamp((r - 0.05f) / 0.24f))
@@ -429,7 +477,7 @@ class FoldOverlayView(context: Context) : View(context) {
         if (flood > 0f) {
             val c = canvas.save()
             if (flood < 1f) canvas.clipRect(cx - spread, 0f, cx + spread, h)
-            drawLacquerPanel(canvas, w, h, fromBlack = false, partOnTime = true, partA = partA, partB = partB)
+            drawLacquerPanel(canvas, w, h, fromBlack = false, partOnTime = true, partA = partA, partB = partB, rtl = rtl)
             canvas.restoreToCount(c)
         }
         // Black beyond the flood
@@ -521,18 +569,17 @@ class FoldOverlayView(context: Context) : View(context) {
         val eA = (xa - cx) / (w - cx)
         val eB = (cx - xb) / cx
         if (xa - xb <= 1.5f) {
-            signatureBase(canvas, w, h, eA, eB)
+            signatureBase(canvas, w, h, eA, eB, rtl = true)
         } else {
             // The bezel's top and bottom settle in as the window opens
             val top = b * FoldMath.smooth(FoldMath.clamp((xa - xb) / (w * 0.25f)))
             val rad = min(w * 0.05f, min((xa - xb) / 2f, (h - 2f * top) / 2f))
-            frameRect.set(xb, top, xa, h - top)
             framePath.reset()
             framePath.addRect(0f, 0f, w + 1f, h, Path.Direction.CW)
-            framePath.addRoundRect(frameRect, rad, rad, Path.Direction.CW)
+            archWindow(framePath, xb, top, xa, h, rad, top * 0.7f)
             val c0 = canvas.save()
             canvas.clipPath(framePath)
-            signatureBase(canvas, w, h, eA, eB)
+            signatureBase(canvas, w, h, eA, eB, rtl = true)
             if (top > 0.5f) {
                 // Same paint as the halves: dark at the outer edge, champagne at the inner lip
                 m.setScale(top, 1f); m.postRotate(90f)
@@ -550,7 +597,7 @@ class FoldOverlayView(context: Context) : View(context) {
             val lit = FoldMath.smooth(FoldMath.clamp((min(mA, mB) - 0.6f) / 0.4f))
             val fade = b / bezel
             framePath.reset()
-            framePath.addRoundRect(frameRect, rad, rad, Path.Direction.CW)
+            archWindow(framePath, xb, top, xa, h, rad, top * 0.7f)
             frameStroke.color = Color.rgb(40, 200, 110)
             frameStroke.alpha = (255 * 0.45f * lit * fade).toInt()
             frameStroke.strokeWidth = w * 0.022f
@@ -568,6 +615,25 @@ class FoldOverlayView(context: Context) : View(context) {
             greenBand(canvas, cx, 0f, h, w * 0.5f, 0.4f * glow, 0f, w + 1f)
             band(canvas, cx, 0f, h, w * 0.22f, 0.28f * glow)
             band(canvas, cx, 0f, h, w * 0.035f, 0.5f * glow)
+        }
+        // Champagne motes spill from the seam as the hold gives, carrying the swing outwards on a
+        // falling arc (charter rule 6: whimsy from the mechanism). Four follow the leading half.
+        val life = 0.3f
+        val u = (t - bt) / life
+        if (u > 0f && u < 1f) {
+            val dt = u * life
+            val a = Math.pow(kotlin.math.sin(Math.PI * min(1f, u * 2.2f)), 0.7).toFloat() * (1f - u)
+            for (i in moteDir.indices) {
+                val x = cx + moteDir[i] * w * moteVx[i] * life * (1f - (1f - u) * (1f - u)) * 0.5f
+                val y = h * (moteY0[i] + moteVy[i] * dt + 0.45f * dt * dt)
+                val rr = w * moteSize[i]
+                m.setScale(rr * 4f, rr * 4f); m.postTranslate(x, y)
+                glintShader.setLocalMatrix(m)
+                glintPaint.alpha = (255 * 0.35f * a).toInt()
+                canvas.drawRect(x - rr * 4f, y - rr * 4f, x + rr * 4f, y + rr * 4f, glintPaint)
+                motePaint.alpha = (255 * a).toInt()
+                canvas.drawCircle(x, y, rr, motePaint)
+            }
         }
         // The frame closes: a glint at each corner as the halves seat
         val cg = FoldMath.smooth(FoldMath.clamp((min(mA, mB) - 0.9f) / 0.1f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.8f) / 0.1f)))
@@ -666,7 +732,7 @@ class FoldOverlayView(context: Context) : View(context) {
      */
     private fun drawLacquerPanel(
         canvas: Canvas, w: Float, h: Float, fromBlack: Boolean = true, partOnTime: Boolean = false,
-        partA: Float = Float.NaN, partB: Float = Float.NaN
+        partA: Float = Float.NaN, partB: Float = Float.NaN, rtl: Boolean = false
     ) {
         val r = 1f - p
         val cx = w / 2f
@@ -688,7 +754,8 @@ class FoldOverlayView(context: Context) : View(context) {
         val gA = FoldMath.smooth(FoldMath.clamp(r / 0.1f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.5f) / 0.12f)))
         if (gA > 0.004f) {
             val gw = w * 0.22f
-            val gx = w - sw * (w + gw * 1.5f) + gw * 0.25f
+            // Drawn mirrored: rtl travels right to left on screen, following the cover as it is pulled open
+            val gx = if (rtl) sw * (w + gw * 1.5f) - gw * 1.25f else w - sw * (w + gw * 1.5f) + gw * 0.25f
             m.setScale(gw, 1f); m.postTranslate(gx, 0f)
             champagneGlossShader.setLocalMatrix(m)
             champagneGlossPaint.alpha = (255 * gA).toInt()
@@ -794,22 +861,17 @@ class FoldOverlayView(context: Context) : View(context) {
             seamPaint.alpha = (255 * 0.95f * glow).toInt()
             canvas.drawRect(cx - 2f, top, cx + 2f, bot, seamPaint)
         }
-        // The seal: a big champagne flash as the arch meets the crease
-        val fl = FoldMath.smooth(FoldMath.clamp((r - 0.22f) / 0.1f)) *
-            (1f - FoldMath.smooth(FoldMath.clamp((r - 0.38f) / 0.12f)))
-        if (fl > 0f) {
-            greenBand(canvas, cx, 0f, h, w * 0.38f, 0.55f * fl, 0f, w + 1f)
-            band(canvas, cx, 0f, h, w * 0.18f, 0.3f * fl)
-            band(canvas, cx, 0f, h, w * 0.07f, 0.95f * fl)
-        }
-        // The last point of light, going out
+        // The seal flash was removed on 19 Oct 2026 (charter rule 4: one climax per transition).
+        // The last point of light dips into the hinge with the magnetic settle, then goes out.
         val glint = FoldMath.smooth(FoldMath.clamp(r / 0.03f)) * (1f - FoldMath.smooth(FoldMath.clamp((r - 0.05f) / 0.1f)))
         if (glint > 0f) {
             val rad = w * 0.06f
-            m.setScale(rad, rad); m.postTranslate(cx, cy)
+            val wd = FoldMath.clamp(1f - r / 0.15f)
+            val gy = cy + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
+            m.setScale(rad, rad); m.postTranslate(cx, gy)
             glintShader.setLocalMatrix(m)
             glintPaint.alpha = (255 * glint).toInt()
-            canvas.drawRect(cx - rad, cy - rad, cx + rad, cy + rad, glintPaint)
+            canvas.drawRect(cx - rad, gy - rad, cx + rad, gy + rad, glintPaint)
         }
     }
 

@@ -1,6 +1,9 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 19 Oct 2026: design charter applied (project doc fold-motion-design-charter.md): opening reflection right to left,
+ *   arched bezel window, champagne motes, touch returns as the bezel seats, seal flash removed, the last light settles,
+ *   light follows the time of day.
  * 18 Oct 2026 (night): opening Frame of Light, chosen in Studio: closingEffect "aperture", openingEffect "frame", finish "visconti", effectMs 900, revealMs 1000, previewed at 1x.
  * 18 Oct 2026 (late): soft-close attraction on closing, rounded release on opening, Signature break-away glow and haptic, parting on real time.
  * 18 Oct 2026: magnetic motion curves (attraction on closing, cling and release on opening), opening 1000ms.

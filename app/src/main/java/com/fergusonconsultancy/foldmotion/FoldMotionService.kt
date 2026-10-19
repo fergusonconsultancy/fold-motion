@@ -356,10 +356,10 @@ class FoldMotionService : Service(), SensorEventListener {
      * effects: an invisible 1x1 pixel at 80% opacity, which costs nothing to
      * composite but keeps the app on Android's frame schedule.
      */
-    private fun setActiveWindow(active: Boolean) {
+    private fun setActiveWindow(active: Boolean, touchThrough: Boolean = false) {
         val view = overlay ?: return
         if (!::params.isInitialized) return
-        val alpha = if (active) 1f else MotionConfig.IDLE_WINDOW_ALPHA
+        val alpha = if (active && !touchThrough) 1f else MotionConfig.IDLE_WINDOW_ALPHA
         val hz = if (active) display?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 0f else 0f
         // Opening uses a fixed square larger than either panel, so the window is not
         // resized when One UI switches screens. A resize means a new, empty buffer
@@ -535,6 +535,7 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private fun startClose(now: Long, scale: Float) {
         overlay?.mode = FoldOverlayView.Mode.CLOSE
+        overlay?.setTimeOfDay(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
         // Planned backwards from when this owner's closes usually switch to the cover:
         // the finale always gets its full length and lands just before the switch
         val predicted = Timing.predictedSwitchMs(this)
@@ -583,6 +584,7 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private fun startReveal(afterUnlock: Boolean = false) {
         mainHandler.removeCallbacks(armDeadline)
+        overlay?.setTimeOfDay(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
         // The lock screen sits above every app overlay, so a reveal played now would be
         // hidden behind it. Hold the cover and play the reveal the moment it unlocks.
         val locked = runCatching {
@@ -709,6 +711,9 @@ class FoldMotionService : Service(), SensorEventListener {
                 }
                 if (!releaseDone && k >= clickAt) {
                     releaseDone = true; haptics.release()
+                    // Charter rule 5: the content is complete, so touch comes back now. At the
+                    // idle opacity Android lets taps through; the bezel slides away under them.
+                    if (MotionConfig.OPENING_EFFECT == MotionConfig.Effect.FRAME_OF_LIGHT) setActiveWindow(true, touchThrough = true)
                 }
                 if (k >= 1f) {
                     val r = stats.result()
