@@ -179,6 +179,24 @@ class FoldOverlayView(context: Context) : View(context) {
     private val moteSize = floatArrayOf(0.005f, 0.0065f, 0.004f, 0.0045f, 0.005f, 0.004f)
     private val motePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 248, 232) }
 
+    // ---- Lit Glass: unit radial lights, positioned and stretched with the shared matrix
+    private fun radial(colors: IntArray, stops: FloatArray) = RadialGradient(0f, 0f, 1f, colors, stops, Shader.TileMode.CLAMP)
+    private val glassInnerShader = radial(
+        intArrayOf(Color.argb(158, 22, 128, 72), Color.argb(107, 10, 86, 46), Color.argb(0, 0, 24, 12)), floatArrayOf(0f, 0.45f, 1f))
+    private val glassInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glassInnerShader }
+    private val glassFrontShader = radial(
+        intArrayOf(Color.argb(255, 214, 240, 214), Color.argb(128, 60, 190, 112), Color.argb(0, 40, 170, 96)), floatArrayOf(0f, 0.35f, 1f))
+    private val glassFrontPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glassFrontShader }
+    private val glassCornerShader = radial(
+        intArrayOf(Color.argb(255, 226, 242, 224), Color.argb(93, 40, 190, 108), Color.argb(0, 40, 190, 108)), floatArrayOf(0f, 0.35f, 1f))
+    private val glassCornerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glassCornerShader }
+    private val sparkShader = radial(intArrayOf(Color.argb(255, 200, 240, 210), Color.argb(0, 200, 240, 210)), floatArrayOf(0f, 1f))
+    private val sparkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = sparkShader }
+    private val sparkCorePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(236, 246, 232) }
+    private val glassDarkShader = unitH(intArrayOf(Color.argb(0, 0, 0, 0), Color.argb(240, 0, 0, 0)), floatArrayOf(0f, 1f))
+    private val glassDarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glassDarkShader }
+    private val glassLinePaint = Paint().apply { color = Color.rgb(226, 240, 222) }
+
     /**
      * The window in the bezel: straight sides (the halves' lips), rounded corners, and its
      * top and bottom drawn as shallow arches, so the bezel is thickest at the corners
@@ -357,6 +375,7 @@ class FoldOverlayView(context: Context) : View(context) {
             MotionConfig.Effect.HINGE_SHADE -> drawHingeShade(canvas, w, h)
             MotionConfig.Effect.SIGNATURE -> drawSignature(canvas, w, h)
             MotionConfig.Effect.FRAME_OF_LIGHT -> drawFrameOfLight(canvas, w, h)
+            MotionConfig.Effect.LIT_GLASS -> drawLitGlass(canvas, w, h)
         }
 
         canvas.restoreToCount(flip)
@@ -542,6 +561,133 @@ class FoldOverlayView(context: Context) : View(context) {
                 canvas.drawRect(x - 1.5f, 0f, x + 1.5f, h, seamPaint)
             }
         }
+    }
+
+    // endregion
+
+    // region Lit Glass (opening)
+
+    /**
+     * Frame of Light, lit glass (22 Oct 2026, chosen in Studio). Honest material: no paint,
+     * no reflection stripes, no flake. The screen is dark glass and Visconti is the colour of
+     * the light inside it. The light wakes at the right edge, where the cover was pulled, and
+     * crosses to the hinge; a fine seam of light; the halves part on the magnetic curves and
+     * stop a bezel short of the edges; the bezel is dark glass with a fine line of light at the
+     * window's edge. It seats with a click, holds, then slides off every edge.
+     */
+    private fun drawLitGlass(canvas: Canvas, w: Float, h: Float) {
+        val r = 1f - p
+        val cx = w / 2f
+        val t = FoldMath.unglide(r)
+        val hold = MotionConfig.FRAME_HOLD_T
+        val bezel = w * 0.042f
+        val b = bezel * (1f - FoldMath.glide(FoldMath.clamp((t - hold) / (1f - hold))))
+        val mA = FoldMath.magnetOut(FoldMath.clamp((t - 0.42f) / 0.34f))
+        val mB = FoldMath.magnetOut(FoldMath.clamp((t - 0.46f) / 0.32f))
+        val xa = cx + (w - b - cx) * mA
+        val xb = cx - (cx - b) * mB
+        // Drawn mirrored: canvas left to right is right to left on screen. On the first frame
+        // the light is already waking at the right edge, where the fingers left the cover.
+        val sx = w * 0.3f + FoldMath.smooth(FoldMath.clamp(t / 0.4f)) * (w * 1.15f)
+        if (xa - xb <= 1.5f) {
+            glassMaterial(canvas, w, h, t, sx)
+        } else {
+            val top = b * FoldMath.smooth(FoldMath.clamp((xa - xb) / (w * 0.25f)))
+            val rad = min(w * 0.05f, min((xa - xb) / 2f, (h - 2f * top) / 2f))
+            framePath.reset()
+            framePath.addRect(0f, 0f, w + 1f, h, Path.Direction.CW)
+            archWindow(framePath, xb, top, xa, h, rad, top * 0.7f)
+            val c0 = canvas.save()
+            canvas.clipPath(framePath)
+            glassMaterial(canvas, w, h, t, sx)
+            canvas.restoreToCount(c0)
+            // The window's edge: a fine line of light, glowing softly onto the content
+            val lit = FoldMath.smooth(FoldMath.clamp((min(mA, mB) - 0.15f) / 0.5f))
+            val fade = min(1f, b / bezel * 1.5f)
+            framePath.reset()
+            archWindow(framePath, xb, top, xa, h, rad, top * 0.7f)
+            strokeGlass(canvas, Color.rgb(40, 190, 108), 0.1f * lit * fade, w * 0.05f)
+            strokeGlass(canvas, Color.rgb(40, 200, 112), 0.32f * lit * fade, w * 0.016f)
+            strokeGlass(canvas, Color.rgb(230, 242, 226), (0.55f + 0.4f * lit) * fade, max(1.5f, w * 0.003f))
+        }
+        // Break-away: a soft breath of light at the crease as the hold gives
+        val bt = MotionConfig.FRAME_BREAK_T
+        val charge = FoldMath.smooth(FoldMath.clamp((t - 0.3f) / (bt - 0.3f)))
+        val glow = charge * (1f - FoldMath.smooth(FoldMath.clamp((t - bt) / 0.22f)))
+        if (glow > 0.004f) {
+            greenBand(canvas, cx, 0f, h, w * 0.36f, 0.24f * glow, 0f, w + 1f)
+            ellipse(canvas, glassFrontShader, glassFrontPaint, cx, h * 0.48f, w * 0.14f, h * 0.58f, 0.28f * glow)
+        }
+        // Sparks of light spill from the seam, carrying the swing outwards on a falling arc
+        val life = 0.3f
+        val u = (t - bt) / life
+        if (u > 0f && u < 1f) {
+            val dt = u * life
+            val a = Math.pow(kotlin.math.sin(Math.PI * min(1f, u * 2.2f)), 0.7).toFloat() * (1f - u)
+            for (i in moteDir.indices) {
+                val x = cx + moteDir[i] * w * moteVx[i] * life * (1f - (1f - u) * (1f - u)) * 0.5f
+                val y = h * (moteY0[i] + moteVy[i] * dt + 0.45f * dt * dt)
+                val rr = w * moteSize[i] * 0.8f
+                ellipse(canvas, sparkShader, sparkPaint, x, y, rr * 4f, rr * 4f, 0.3f * a)
+                sparkCorePaint.alpha = (255 * 0.9f * a).toInt()
+                canvas.drawCircle(x, y, rr, sparkCorePaint)
+            }
+        }
+        // The frame closes: light gathers softly at each corner as the halves seat
+        val cg = FoldMath.smooth(FoldMath.clamp((min(mA, mB) - 0.9f) / 0.1f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.8f) / 0.1f)))
+        if (cg > 0.004f) {
+            for (i in 0..3) {
+                val x = if (i % 2 == 0) b else w - b
+                val y = if (i < 2) b else h - b
+                ellipse(canvas, glassCornerShader, glassCornerPaint, x, y, w * 0.1f, w * 0.1f, 0.55f * cg)
+            }
+        }
+    }
+
+    /** Dark glass with Visconti light inside it, unlit beyond the waking front at sx. */
+    private fun glassMaterial(canvas: Canvas, w: Float, h: Float, t: Float, sx: Float) {
+        val cx = w / 2f
+        blackPaint.alpha = 255
+        canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
+        // The light inside the glass: deepest at the edges, warmest at the heart
+        ellipse(canvas, glassInnerShader, glassInnerPaint, cx, h * 0.5f, w * 0.8f, h * 0.78f, 1f, cover = true, w = w, h = h)
+        // The glass not yet reached by the light stays dark
+        val fe = w * 0.42f
+        m.setScale(fe, 1f); m.postTranslate(sx - fe, 0f)
+        glassDarkShader.setLocalMatrix(m)
+        if (sx > fe * 0f) canvas.drawRect(max(0f, sx - fe), 0f, min(w + 1f, sx), h, glassDarkPaint)
+        if (sx < w + 1f) { blackPaint.alpha = 240; canvas.drawRect(max(0f, sx), 0f, w + 1f, h, blackPaint); blackPaint.alpha = 255 }
+        // The waking front: a soft column of light, strongest at the middle of the screen
+        val fa = 1f - FoldMath.smooth(FoldMath.clamp((t - 0.34f) / 0.1f))
+        if (fa > 0.004f) ellipse(canvas, glassFrontShader, glassFrontPaint, sx - fe * 0.55f, h * 0.48f, w * 0.13f, h * 0.56f, 0.4f * fa)
+        // The seam: one fine line of light as the front crosses the crease
+        val seam = FoldMath.smooth(FoldMath.clamp((t - 0.18f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.4f) / 0.08f)))
+        if (seam > 0.004f) {
+            greenBand(canvas, cx, 0f, h, w * 0.07f, 0.2f * seam, 0f, w + 1f)
+            glassLinePaint.alpha = (255 * 0.7f * seam).toInt()
+            canvas.drawRect(cx - 0.75f, 0f, cx + 0.75f, h, glassLinePaint)
+        }
+    }
+
+    /** A soft elliptical light from a unit radial shader, centred on (x, y). */
+    private fun ellipse(
+        canvas: Canvas, shader: Shader, paint: Paint, x: Float, y: Float, rx: Float, ry: Float, alpha: Float,
+        cover: Boolean = false, w: Float = 0f, h: Float = 0f
+    ) {
+        if (alpha <= 0.004f) return
+        m.setScale(rx, ry); m.postTranslate(x, y)
+        shader.setLocalMatrix(m)
+        paint.alpha = (255 * min(1f, alpha)).toInt()
+        if (cover) canvas.drawRect(0f, 0f, w + 1f, h, paint)
+        else canvas.drawRect(x - rx, y - ry, x + rx, y + ry, paint)
+    }
+
+    private fun strokeGlass(canvas: Canvas, color: Int, alpha: Float, width: Float) {
+        if (alpha <= 0.004f) return
+        frameStroke.color = color
+        frameStroke.alpha = (255 * min(1f, alpha)).toInt()
+        frameStroke.strokeWidth = width
+        canvas.drawPath(framePath, frameStroke)
     }
 
     // endregion

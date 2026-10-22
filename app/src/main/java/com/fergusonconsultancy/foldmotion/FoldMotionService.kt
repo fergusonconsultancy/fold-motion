@@ -706,14 +706,14 @@ class FoldMotionService : Service(), SensorEventListener {
                 stats.onFrame(frameTimeNanos)
                 val clickAt = when (MotionConfig.OPENING_EFFECT) {
                     MotionConfig.Effect.SIGNATURE -> MotionConfig.SIGNATURE_BREAK_T
-                    MotionConfig.Effect.FRAME_OF_LIGHT -> MotionConfig.FRAME_SEAT_T
+                    MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS -> MotionConfig.FRAME_SEAT_T
                     else -> 2f
                 }
                 if (!releaseDone && k >= clickAt) {
                     releaseDone = true; haptics.release()
                     // Charter rule 5: the content is complete, so touch comes back now. At the
                     // idle opacity Android lets taps through; the bezel slides away under them.
-                    if (MotionConfig.OPENING_EFFECT == MotionConfig.Effect.FRAME_OF_LIGHT) setActiveWindow(true, touchThrough = true)
+                    if (MotionConfig.OPENING_EFFECT == MotionConfig.Effect.FRAME_OF_LIGHT || MotionConfig.OPENING_EFFECT == MotionConfig.Effect.LIT_GLASS) setActiveWindow(true, touchThrough = true)
                 }
                 if (k >= 1f) {
                     val r = stats.result()
@@ -767,7 +767,7 @@ class FoldMotionService : Service(), SensorEventListener {
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setContentTitle("Fold Motion is running")
-            .setContentText("Arch Aperture closing, Frame of Light opening")
+            .setContentText("Arch Aperture closing, Lit Glass opening")
             .setOngoing(true)
             .build()
 

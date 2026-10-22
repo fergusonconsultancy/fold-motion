@@ -1,6 +1,7 @@
 package com.fergusonconsultancy.foldmotion
 
 /**
+ * 22 Oct 2026: opening Lit Glass (Frame of Light without the lacquer: dark glass, Visconti light inside it), chosen in Studio.
  * 19 Oct 2026: design charter applied (project doc fold-motion-design-charter.md): opening reflection right to left,
  *   arched bezel window, champagne motes, touch returns as the bezel seats, seal flash removed, the last light settles,
  *   light follows the time of day.
@@ -28,7 +29,7 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS }
 
     /**
      * Closing effect. Arch Aperture since 16 Oct 2026 (night), chosen in Studio: the
@@ -41,7 +42,7 @@ object MotionConfig {
      * Hinge Shade, Lacquer Panel, Arch Aperture, Crease Split and Nave of Light were
      * tried before it.
      */
-    val OPENING_EFFECT = Effect.FRAME_OF_LIGHT
+    val OPENING_EFFECT = Effect.LIT_GLASS
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
