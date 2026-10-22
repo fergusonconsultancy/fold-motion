@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- The half that stays: a circle's right side, outlined in champagne -->
+    <path android:pathData="M54,28 A26,26 0 0 1 54,80 Z"
+        android:fillColor="#FF18201C" android:strokeColor="#FFD9BB86" android:strokeWidth="1.4"/>
+    <!-- The half in mid-swing, foreshortened; lacquer brightens left to right with the closing fold -->
+    <path android:pathData="M54,28 A15,26 0 0 0 54,80 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="39" android:startY="54" android:endX="54" android:endY="54">
+                <item android:offset="0" android:color="#FF8C6E42"/>
+                <item android:offset="0.6" android:color="#FFD9BB86"/>
+                <item android:offset="1" android:color="#FFF7E6C2"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- The crease: straight, for the machine -->
+    <path android:pathData="M54,26 L54,82" android:strokeColor="#FFF6F1E6"
+        android:strokeWidth="1.6" android:strokeLineCap="round"/>
+    <!-- The last light settling into the hinge -->
+    <path android:pathData="M47,80 a7,7 0 1 0 14,0 a7,7 0 1 0 -14,0">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="54" android:centerY="80" android:gradientRadius="7">
+                <item android:offset="0" android:color="#E6FFF8E8"/>
+                <item android:offset="1" android:color="#00FFF8E8"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M51.6,80 a2.4,2.4 0 1 0 4.8,0 a2.4,2.4 0 1 0 -4.8,0" android:fillColor="#FFFFF8E8"/>
+    <!-- Champagne motes spilling from the seam on the swing's arc -->
+    <path android:pathData="M46.2,24.5 a1.3,1.3 0 1 0 2.6,0 a1.3,1.3 0 1 0 -2.6,0" android:fillColor="#FFE6CC9A"/>
+    <path android:pathData="M42.1,22 a0.9,0.9 0 1 0 1.8,0 a0.9,0.9 0 1 0 -1.8,0" android:fillColor="#B3E6CC9A"/>
+    <path android:pathData="M38.9,21 a0.6,0.6 0 1 0 1.2,0 a0.6,0.6 0 1 0 -1.2,0" android:fillColor="#73E6CC9A"/>
+</vector>
