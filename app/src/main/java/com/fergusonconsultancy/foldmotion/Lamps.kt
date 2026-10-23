@@ -28,7 +28,7 @@ import kotlin.math.sin
 class Lamps(rosso: Boolean) {
 
     companion object {
-        const val RING_BEADS = 22
+        const val RING_BEADS = 30
         const val BAR_BEADS = 15
         const val EMBER = 0.1f
         /** Brightness of a lit bead once its flare has passed. */
@@ -56,6 +56,9 @@ class Lamps(rosso: Boolean) {
     private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = coreRgb }
     private val lensPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(6, 2, 3) }
     private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = glowRgb }
+    // The ring's lit tube: one short arc per bead, so the ring reads as one continuous light
+    private val tubePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = glowRgb; strokeCap = Paint.Cap.ROUND }
+    private val arcBox = android.graphics.RectF()
     private val m = Matrix()
 
     /** Per-bead brightness, filled by the effect each frame: [side][index], ring first, then bar. */
@@ -165,8 +168,18 @@ class Lamps(rosso: Boolean) {
         rimPaint.strokeWidth = ringR * 0.05f
         rimPaint.alpha = (255 * 0.22f * fade).toInt()
         canvas.drawCircle(outer, cy, ringR * 0.62f, rimPaint)
+        // The tube under the ring's beads, lit bead by bead
+        tubePaint.strokeWidth = ringR * 0.15f
+        arcBox.set(outer - ringR, cy - ringR, outer + ringR, cy + ringR)
+        val span = 360f / RING_BEADS
+        for (i in 0 until RING_BEADS) {
+            val a = 0.32f * lv[i] * fade
+            if (a <= 0.01f) continue
+            tubePaint.alpha = (255 * min(1f, a)).toInt()
+            canvas.drawArc(arcBox, Math.toDegrees(ringAngle(side, i).toDouble()).toFloat() - span * 0.6f, span * 1.2f, false, tubePaint)
+        }
         // Beads
-        val ringCore = ringR * 0.085f
+        val ringCore = ringR * 0.07f
         val pitch = (w / 2f - tipGap - (ringCx + ringR * 0.92f)) / (BAR_BEADS - 1f)
         for (i in lv.indices) {
             val x = beadX(side, i, offset)
@@ -175,14 +188,14 @@ class Lamps(rosso: Boolean) {
             val k = if (isBar) (i - RING_BEADS) / (BAR_BEADS - 1f) else 0f
             // The bar thins and dims towards its tip
             val taper = if (isBar) 1f - 0.5f * k.pow(1.4f) else 1f
-            val rc = if (isBar) min(pitch * 0.3f, ringR * 0.1f) * taper else ringCore
+            val rc = if (isBar) min(pitch * 0.36f, ringR * 0.11f) * taper else ringCore
             bead(canvas, x, y, rc, lv[i] * fade * (if (isBar) 1f - 0.35f * k.pow(1.6f) else 1f))
         }
     }
 
     fun bead(canvas: Canvas, x: Float, y: Float, rc: Float, lvl: Float) {
         if (lvl <= 0.006f) return
-        val rg = rc * 4.4f
+        val rg = rc * 5.2f
         m.setScale(rg, rg); m.postTranslate(x, y)
         glowShader.setLocalMatrix(m)
         glowPaint.alpha = (255 * min(1f, 0.55f * lvl)).toInt()
