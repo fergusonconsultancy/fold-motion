@@ -29,20 +29,56 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS, LAMP_GLASS, FANALE }
 
     /**
-     * Closing effect. Arch Aperture since 16 Oct 2026 (night), chosen in Studio: the
-     * arch closes in towards the crease with its lit rim, the crease flashes, then black.
+     * The pairings Mechack chooses between in the app (23 Oct 2026). Each names its closing and
+     * opening; [apply] sets them before every run.
      */
-    val CLOSING_EFFECT = Effect.ARCH_APERTURE
+    enum class Style(val label: String, val detail: String, val closing: Effect, val opening: Effect) {
+        VISCONTI("Visconti", "Lacquer arch closing, lit glass opening", Effect.ARCH_APERTURE, Effect.LIT_GLASS),
+        GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.ARCH_APERTURE, Effect.LAMP_GLASS),
+        FANALE("Fanale", "Alfa Romeo only: the lamps light, part and lock", Effect.FANALE, Effect.FANALE),
+    }
+
+    private const val PREFS = "fold_motion"
+    private const val STYLE_KEY = "style"
+
+    fun style(context: android.content.Context): Style = runCatching {
+        Style.valueOf(context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(STYLE_KEY, null)!!)
+    }.getOrDefault(Style.VISCONTI)
+
+    fun setStyle(context: android.content.Context, s: Style) {
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putString(STYLE_KEY, s.name).apply()
+        apply(context)
+    }
+
+    /** Reads the chosen style into the effects the overlay draws. */
+    fun apply(context: android.content.Context) {
+        val s = style(context)
+        CLOSING_EFFECT = s.closing
+        OPENING_EFFECT = s.opening
+    }
+
+    /** Closing effect; set from the chosen style. Arch Aperture since 16 Oct 2026 (night). */
+    var CLOSING_EFFECT = Effect.ARCH_APERTURE
+        private set
+
+    /** Opening effect; set from the chosen style. Lit Glass since 22 Oct 2026. */
+    var OPENING_EFFECT = Effect.LIT_GLASS
+        private set
+
+    /** Giulietta: the lamps in Alfa red inside the dark Visconti glass (false: Visconti light). */
+    const val LAMP_GLASS_ROSSO = true
 
     /**
-     * Opening effect. Signature since 16 Oct 2026 (late): built as a premium opening.
-     * Hinge Shade, Lacquer Panel, Arch Aperture, Crease Split and Nave of Light were
-     * tried before it.
+     * Fanale, as shares of the reveal's time: the left ring closes and the lamps bloom at
+     * LIGHTS_T (the haptic click); touch returns at TOUCH_T, when the halves have nearly gone.
+     * Closing: the halves meet at CONTACT_P of the closing's progress (the click).
      */
-    val OPENING_EFFECT = Effect.LIT_GLASS
+    const val FANALE_LIGHTS_T = 0.54f
+    const val FANALE_TOUCH_T = 0.8f
+    const val FANALE_CONTACT_P = 0.545f
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs

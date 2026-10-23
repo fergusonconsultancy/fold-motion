@@ -99,6 +99,7 @@ class FoldMotionService : Service(), SensorEventListener {
     }
     private var firstRevealFrameLogged = false
     private var releaseDone = false
+    private var touchDone = false
     /** Opening onto the lock screen: give up if it is not unlocked within this window. */
     private val unlockDeadline = Runnable {
         if (phase == Phase.AWAIT_UNLOCK) {
@@ -236,6 +237,7 @@ class FoldMotionService : Service(), SensorEventListener {
 
     override fun onCreate() {
         super.onCreate()
+        MotionConfig.apply(this)
         startAsForeground()
         running = true
         Status.mark(this, Status.STARTED)
@@ -604,6 +606,8 @@ class FoldMotionService : Service(), SensorEventListener {
         overlay?.drawCount = 0
         firstRevealFrameLogged = false
         releaseDone = false
+        touchDone = false
+        MotionConfig.apply(this)
         if (isInteractive()) haptics.settle()
         Status.mark(this, Status.PLAYED)
         enter(Phase.REVEALING)
@@ -664,7 +668,8 @@ class FoldMotionService : Service(), SensorEventListener {
                 stats.onFrame(frameTimeNanos)
                 // Haptics timed to the light: tick as the blades start, click on the pulse
                 if (!tickDone && p >= MotionConfig.TICK_AT) { tickDone = true; haptics.tick() }
-                if (!clickDone && p >= MotionConfig.CLICK_AT) { clickDone = true; haptics.click() }
+                val clickP = if (MotionConfig.CLOSING_EFFECT == MotionConfig.Effect.FANALE) MotionConfig.FANALE_CONTACT_P else MotionConfig.CLICK_AT
+                if (!clickDone && p >= clickP) { clickDone = true; haptics.click() }
                 if (k >= 1f) {
                     saveRun(100)
                     enter(Phase.HOLDING)
@@ -704,17 +709,23 @@ class FoldMotionService : Service(), SensorEventListener {
                 val k = FoldMath.clamp(elapsed() / revealMs)
                 view.show(1f - FoldMath.glide(k))
                 stats.onFrame(frameTimeNanos)
-                val clickAt = when (MotionConfig.OPENING_EFFECT) {
+                val opening = MotionConfig.OPENING_EFFECT
+                val clickAt = when (opening) {
                     MotionConfig.Effect.SIGNATURE -> MotionConfig.SIGNATURE_BREAK_T
-                    MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS -> MotionConfig.FRAME_SEAT_T
+                    MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS, MotionConfig.Effect.LAMP_GLASS -> MotionConfig.FRAME_SEAT_T
+                    MotionConfig.Effect.FANALE -> MotionConfig.FANALE_LIGHTS_T
                     else -> 2f
                 }
-                if (!releaseDone && k >= clickAt) {
-                    releaseDone = true; haptics.release()
-                    // Charter rule 5: the content is complete, so touch comes back now. At the
-                    // idle opacity Android lets taps through; the bezel slides away under them.
-                    if (MotionConfig.OPENING_EFFECT == MotionConfig.Effect.FRAME_OF_LIGHT || MotionConfig.OPENING_EFFECT == MotionConfig.Effect.LIT_GLASS) setActiveWindow(true, touchThrough = true)
+                // Charter rule 5: touch comes back the moment the content is complete. At the
+                // idle opacity Android lets taps through; the last of the effect slides away under them.
+                val touchAt = when (opening) {
+                    MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS, MotionConfig.Effect.LAMP_GLASS -> MotionConfig.FRAME_SEAT_T
+                    MotionConfig.Effect.FANALE -> MotionConfig.FANALE_TOUCH_T
+                    else -> 2f
                 }
+                // k is real time: the effects draw on unglide(glide(k)), which is k
+                if (!releaseDone && k >= clickAt) { releaseDone = true; haptics.release() }
+                if (!touchDone && k >= touchAt) { touchDone = true; setActiveWindow(true, touchThrough = true) }
                 if (k >= 1f) {
                     val r = stats.result()
                     EventLog.add(
