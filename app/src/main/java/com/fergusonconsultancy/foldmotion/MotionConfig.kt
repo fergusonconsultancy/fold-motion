@@ -78,7 +78,7 @@ object MotionConfig {
      */
     const val FANALE_LIGHTS_T = 0.54f
     const val FANALE_TOUCH_T = 0.8f
-    const val FANALE_CONTACT_P = 0.5f
+    const val FANALE_CONTACT_P = 0.545f
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs

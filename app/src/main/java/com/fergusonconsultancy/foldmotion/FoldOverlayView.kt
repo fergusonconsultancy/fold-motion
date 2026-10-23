@@ -1337,17 +1337,19 @@ class FoldOverlayView(context: Context) : View(context) {
         val cx = w / 2f
         val l = rosso
         l.layout(w, h)
-        val eL = FoldMath.clamp(p / 0.47f)
-        val eR = FoldMath.clamp((p - 0.03f) / 0.47f)
+        // The halves meet exactly at the closing plan's contact (BUILD_END); the left leads
+        val eL = FoldMath.clamp(p / MotionConfig.BUILD_END)
+        val eR = FoldMath.clamp((p - 0.025f) / (MotionConfig.BUILD_END - 0.025f))
         val xl = cx * eL
         val xr = w - (w - cx) * eR
-        l.scheduleOut(0, p, 0.5f, 0.6f, 0.59f, 0.73f)
-        l.scheduleOut(1, p, 0.55f, 0.65f, 0.65f, 0.79f)
-        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.15f))
+        // The rings go out as the halves arrive, the bars across the contact (the finale is only 300ms)
+        l.scheduleOut(0, p, 0.3f, 0.44f, 0.48f, 0.7f)
+        l.scheduleOut(1, p, 0.36f, 0.5f, 0.56f, 0.8f)
+        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.82f) / 0.14f))
         // Shadow and lip light read the halves' approach, so they run on 1 - e
         fanaleHalves(canvas, l, w, h, xl, xr, 1f - eL, 1f - eR, fade)
         // The last point of light: the two tips meet on the crease, dip into the hinge, go out
-        val glint = FoldMath.smooth(FoldMath.clamp((p - 0.72f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.84f) / 0.12f)))
+        val glint = FoldMath.smooth(FoldMath.clamp((p - 0.74f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.84f) / 0.12f)))
         if (glint > 0.004f) {
             val wd = FoldMath.clamp((p - 0.78f) / 0.18f)
             val gy = h * 0.5f - l.ringRadius * 0.18f + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
