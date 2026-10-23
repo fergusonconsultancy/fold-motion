@@ -376,6 +376,14 @@ class FoldOverlayView(context: Context) : View(context) {
             MotionConfig.Effect.SIGNATURE -> drawSignature(canvas, w, h)
             MotionConfig.Effect.FRAME_OF_LIGHT -> drawFrameOfLight(canvas, w, h)
             MotionConfig.Effect.LIT_GLASS -> drawLitGlass(canvas, w, h)
+            MotionConfig.Effect.LAMP_GLASS -> drawLitGlass(canvas, w, h, lamp = true)
+            MotionConfig.Effect.FANALE -> {
+                // Lamps are laid out in screen coordinates, so undo the mirror
+                val c = canvas.save()
+                if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+                if (mode == Mode.CLOSE) drawFanaleClose(canvas, w, h) else drawFanaleOpen(canvas, w, h)
+                canvas.restoreToCount(c)
+            }
         }
 
         canvas.restoreToCount(flip)
@@ -575,7 +583,46 @@ class FoldOverlayView(context: Context) : View(context) {
      * stop a bezel short of the edges; the bezel is dark glass with a fine line of light at the
      * window's edge. It seats with a click, holds, then slides off every edge.
      */
-    private fun drawLitGlass(canvas: Canvas, w: Float, h: Float) {
+    private val rosso = Lamps(rosso = true)
+    private val visconti = Lamps(rosso = false)
+
+    /**
+     * Lamp Glass's light (23 Oct 2026): the Giulietta's rear lamps lit in sequence inside the
+     * dark glass, in place of Lit Glass's soft waking column. The right ring sweeps round where
+     * the fingers left the cover, its bar runs in to the crease, the light crosses, the left bar
+     * runs out and the left ring closes just as the halves' hold gives. Returns the head's
+     * position on screen, which the unlit glass follows.
+     */
+    private fun lampGlassLights(t: Float, w: Float, h: Float): Lamps {
+        val l = if (MotionConfig.LAMP_GLASS_ROSSO) rosso else visconti
+        l.layout(w, h)
+        l.scheduleIgnite(1, t, 0.0f, 0.1f, 0.08f, 0.22f, barFromTip = false)
+        l.scheduleIgnite(0, t, 0.33f, 0.43f, 0.23f, 0.34f, barFromTip = true)
+        return l
+    }
+
+    private fun lampHead(t: Float, w: Float): Float {
+        val ring = w * 0.15f
+        val tip = w * 0.055f
+        return when {
+            t < 0.1f -> w
+            t < 0.22f -> (w - ring) + ((w / 2f + tip) - (w - ring)) * ((t - 0.1f) / 0.12f)
+            t < 0.34f -> (w / 2f - tip) + (ring - (w / 2f - tip)) * ((t - 0.22f) / 0.12f)
+            else -> -w * 0.5f
+        }
+    }
+
+    /** Draws the lamps riding their halves; the canvas here is mirrored, so it is undone first. */
+    private fun drawGlassLamps(canvas: Canvas, l: Lamps, w: Float, leftLip: Float, rightLip: Float) {
+        val c = canvas.save()
+        if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+        val cx = w / 2f
+        l.draw(canvas, 0, leftLip - cx)
+        l.draw(canvas, 1, rightLip - cx)
+        canvas.restoreToCount(c)
+    }
+
+    private fun drawLitGlass(canvas: Canvas, w: Float, h: Float, lamp: Boolean = false) {
         val r = 1f - p
         val cx = w / 2f
         val t = FoldMath.unglide(r)
@@ -588,9 +635,12 @@ class FoldOverlayView(context: Context) : View(context) {
         val xb = cx - (cx - b) * mB
         // Drawn mirrored: canvas left to right is right to left on screen. On the first frame
         // the light is already waking at the right edge, where the fingers left the cover.
-        val sx = w * 0.3f + FoldMath.smooth(FoldMath.clamp(t / 0.4f)) * (w * 1.15f)
+        val lamps = if (lamp) lampGlassLights(t, w, h) else null
+        // With lamps, the glass wakes behind the running head (canvas x is mirrored screen x)
+        val sx = if (lamp) w - lampHead(t, w) + w * 0.12f else w * 0.3f + FoldMath.smooth(FoldMath.clamp(t / 0.4f)) * (w * 1.15f)
         if (xa - xb <= 1.5f) {
-            glassMaterial(canvas, w, h, t, sx)
+            glassMaterial(canvas, w, h, t, sx, front = !lamp)
+            lamps?.let { drawGlassLamps(canvas, it, w, w / 2f, w / 2f) }
         } else {
             val top = b * FoldMath.smooth(FoldMath.clamp((xa - xb) / (w * 0.25f)))
             val rad = min(w * 0.05f, min((xa - xb) / 2f, (h - 2f * top) / 2f))
@@ -599,7 +649,9 @@ class FoldOverlayView(context: Context) : View(context) {
             archWindow(framePath, xb, top, xa, h, rad, top * 0.7f)
             val c0 = canvas.save()
             canvas.clipPath(framePath)
-            glassMaterial(canvas, w, h, t, sx)
+            glassMaterial(canvas, w, h, t, sx, front = !lamp)
+            // Screen left lip is the canvas's xa, screen right lip its xb
+            lamps?.let { drawGlassLamps(canvas, it, w, w - xa, w - xb) }
             canvas.restoreToCount(c0)
             // The window's edge: a fine line of light, glowing softly onto the content
             val lit = FoldMath.smooth(FoldMath.clamp((min(mA, mB) - 0.15f) / 0.5f))
@@ -645,7 +697,7 @@ class FoldOverlayView(context: Context) : View(context) {
     }
 
     /** Dark glass with Visconti light inside it, unlit beyond the waking front at sx. */
-    private fun glassMaterial(canvas: Canvas, w: Float, h: Float, t: Float, sx: Float) {
+    private fun glassMaterial(canvas: Canvas, w: Float, h: Float, t: Float, sx: Float, front: Boolean = true) {
         val cx = w / 2f
         blackPaint.alpha = 255
         canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
@@ -659,7 +711,7 @@ class FoldOverlayView(context: Context) : View(context) {
         if (sx < w + 1f) { blackPaint.alpha = 240; canvas.drawRect(max(0f, sx), 0f, w + 1f, h, blackPaint); blackPaint.alpha = 255 }
         // The waking front: a soft column of light, strongest at the middle of the screen
         val fa = 1f - FoldMath.smooth(FoldMath.clamp((t - 0.34f) / 0.1f))
-        if (fa > 0.004f) ellipse(canvas, glassFrontShader, glassFrontPaint, sx - fe * 0.55f, h * 0.48f, w * 0.13f, h * 0.56f, 0.4f * fa)
+        if (front && fa > 0.004f) ellipse(canvas, glassFrontShader, glassFrontPaint, sx - fe * 0.55f, h * 0.48f, w * 0.13f, h * 0.56f, 0.4f * fa)
         // The seam: one fine line of light as the front crosses the crease
         val seam = FoldMath.smooth(FoldMath.clamp((t - 0.18f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.4f) / 0.08f)))
         if (seam > 0.004f) {
@@ -1227,6 +1279,117 @@ class FoldOverlayView(context: Context) : View(context) {
         if (alpha <= 0.004f || x1 <= x0) return
         flakePaint.alpha = (255 * alpha).toInt()
         canvas.drawRect(x0, 0f, x1, h, flakePaint)
+    }
+
+    // endregion
+
+    // region Fanale (23 Oct 2026): Alfa Romeo as the only influence
+
+    /**
+     * Opening: the phone wakes like the Giulietta at night. Black, with the two rear lamps' rims
+     * and embers already there. The right ring sweeps round where the fingers left the cover; its
+     * bar runs in to the crease; the light crosses on a fine seam; the left bar runs out and the
+     * left ring closes. Lights on: a soft bloom (the climax, with the haptic click). Then the dark
+     * halves part on the magnetic curves, each carrying its lamp out past the screen's edge, their
+     * lips lit in red and casting the lamps' glow onto the content like tail lights on wet tarmac.
+     */
+    private fun drawFanaleOpen(canvas: Canvas, w: Float, h: Float) {
+        val t = FoldMath.unglide(1f - p)
+        val cx = w / 2f
+        val l = rosso
+        l.layout(w, h)
+        l.scheduleIgnite(1, t, 0.02f, 0.15f, 0.13f, 0.29f, barFromTip = false)
+        l.scheduleIgnite(0, t, 0.42f, 0.54f, 0.30f, 0.43f, barFromTip = true)
+        val bt = MotionConfig.FANALE_LIGHTS_T
+        val bloom = FoldMath.smooth(FoldMath.clamp((t - (bt - 0.03f)) / 0.04f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - bt - 0.04f) / 0.16f)))
+        if (bloom > 0f) l.scale(1f + 0.4f * bloom)
+
+        val eR = FoldMath.magnetOut(FoldMath.clamp((t - 0.5f) / 0.4f))
+        val eL = FoldMath.magnetOut(FoldMath.clamp((t - 0.54f) / 0.38f))
+        val xr = cx + (w - cx) * eR
+        val xl = cx - cx * eL
+        fanaleHalves(canvas, l, w, h, xl, xr, eL, eR, 1f)
+
+        // The seam: as the light crosses the crease, one fine line
+        val seam = FoldMath.smooth(FoldMath.clamp((t - 0.27f) / 0.025f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.31f) / 0.06f)))
+        if (seam > 0.004f && xr - xl < 2f) {
+            l.glow(canvas, cx, h * 0.5f, w * 0.03f, h * 0.55f, 0.3f * seam)
+            l.line(canvas, cx, 0f, h, max(1.2f, w * 0.0012f), 0.6f * seam)
+        }
+        // Lights on: the rings breathe out onto the bodywork
+        if (bloom > 0.004f && xr - xl < w * 0.3f) {
+            for (side in 0..1) {
+                val off = if (side == 0) xl - cx else xr - cx
+                val x = (if (side == 0) w * 0.15f else w * 0.85f) + off
+                l.glow(canvas, x, h * 0.5f, l.ringRadius * 2.4f, l.ringRadius * 2.4f, 0.22f * bloom)
+            }
+        }
+    }
+
+    /**
+     * Closing: locking the car. The dark halves slide in from the edges with their lamps lit, the
+     * left a beat ahead (the fold travels left to right), and meet on the crease with the soft
+     * close (haptic click at contact). Then the lamps go out as an indicator does: each ring
+     * round from its far side, then its bar in towards the crease, the left lamp first. The two
+     * tips meet as the last point of light on the crease, which dips into the hinge and goes out.
+     */
+    private fun drawFanaleClose(canvas: Canvas, w: Float, h: Float) {
+        val cx = w / 2f
+        val l = rosso
+        l.layout(w, h)
+        val eL = FoldMath.clamp(p / 0.47f)
+        val eR = FoldMath.clamp((p - 0.03f) / 0.47f)
+        val xl = cx * eL
+        val xr = w - (w - cx) * eR
+        l.scheduleOut(0, p, 0.5f, 0.6f, 0.59f, 0.73f)
+        l.scheduleOut(1, p, 0.55f, 0.65f, 0.65f, 0.79f)
+        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.15f))
+        // Shadow and lip light read the halves' approach, so they run on 1 - e
+        fanaleHalves(canvas, l, w, h, xl, xr, 1f - eL, 1f - eR, fade)
+        // The last point of light: the two tips meet on the crease, dip into the hinge, go out
+        val glint = FoldMath.smooth(FoldMath.clamp((p - 0.72f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.84f) / 0.12f)))
+        if (glint > 0.004f) {
+            val wd = FoldMath.clamp((p - 0.78f) / 0.18f)
+            val gy = h * 0.5f - l.ringRadius * 0.18f + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
+            l.glow(canvas, cx, gy, w * 0.045f, w * 0.045f, 0.55f * glint)
+            l.coreDot(canvas, cx, gy, l.ringRadius * 0.08f, 0.9f * glint)
+        }
+    }
+
+    /**
+     * The two dark halves with their lamps. The left half covers [0, xl], the right [xr, w].
+     * [eL] and [eR] are how far each has travelled away from the crease (0 closed, 1 gone): the
+     * lips glow and cast shadows only while they are near the content's middle.
+     */
+    private fun fanaleHalves(canvas: Canvas, l: Lamps, w: Float, h: Float, xl: Float, xr: Float, eL: Float, eR: Float, fade: Float) {
+        val cx = w / 2f
+        blackPaint.alpha = 255
+        if (xr - xl <= 1f) {
+            canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
+        } else {
+            canvas.drawRect(0f, 0f, xl, h, blackPaint)
+            canvas.drawRect(xr, 0f, w + 1f, h, blackPaint)
+            // Shadows cast onto the content by the halves
+            shade(canvas, xr, -w * 0.06f, 0f, h, 0.75f * min(1f, eR * 8f) * (1f - eR))
+            shade(canvas, xl, w * 0.06f, 0f, h, 0.75f * min(1f, eL * 8f) * (1f - eL))
+            // Red light from the lips falling onto the content
+            val lipR = min(1f, eR * 6f) * (1f - FoldMath.smooth(FoldMath.clamp((eR - 0.35f) / 0.6f)))
+            val lipL = min(1f, eL * 6f) * (1f - FoldMath.smooth(FoldMath.clamp((eL - 0.35f) / 0.6f)))
+            l.glow(canvas, xr, h * 0.5f, w * 0.05f, h * 0.62f, 0.22f * lipR)
+            l.glow(canvas, xl, h * 0.5f, w * 0.05f, h * 0.62f, 0.22f * lipL)
+            l.line(canvas, xr, 0f, h, max(1.5f, w * 0.0014f), 0.65f * lipR)
+            l.line(canvas, xl, 0f, h, max(1.5f, w * 0.0014f), 0.65f * lipL)
+        }
+        // Each lamp rides its half and is seen only on it
+        val shut = xr - xl <= 1f
+        var c = canvas.save()
+        canvas.clipRect(0f, 0f, if (shut) cx else xl, h)
+        l.draw(canvas, 0, xl - cx, fade)
+        canvas.restoreToCount(c)
+        c = canvas.save()
+        canvas.clipRect(if (shut) cx else xr, 0f, w + 1f, h)
+        l.draw(canvas, 1, xr - cx, fade)
+        canvas.restoreToCount(c)
     }
 
     // endregion
