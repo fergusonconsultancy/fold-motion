@@ -1,6 +1,12 @@
 # Fold Motion
 
-A De Stijl fold transition for the Galaxy Z Fold8 Ultra, in Visconti green. As you close the phone, black rules draw a grid across the inner screen from left to right, the crease among them, and the cells fill in sequence, a few in green and champagne. A haptic click marks the moment the grid locks, then a green-to-black dusk rolls in so the screen meets One UI's panel switch without a jolt. Opening gets a low haptic settle as the inner screen arrives. The effect learns your closing speed and fits itself inside it, measures its own frame timing, and restarts itself if the phone kills it.
+A fold transition for the Galaxy Z Fold8 Ultra. Three styles, chosen in the app:
+
+- **Visconti**: a lacquer arch closes in on the crease (closing); dark glass with Visconti light inside it opens into a lit bezel that seats and slides away (opening).
+- **Giulietta**: the same glass opening, woken by the Giulietta's rear lamps. The right ring sweeps round where your fingers left the cover, its beaded bar runs in to the crease, the light crosses, and the left lamp completes as the halves' hold gives.
+- **Fanale**: Alfa Romeo as the only influence. Opening, both lamps light in sequence, bloom, and the dark halves part carrying them off the edges. Closing locks the car: the halves slide in lit, meet with a soft close, the lamps go out like an indicator, and the last point of light dips into the hinge.
+
+The effect learns your closing speed and fits itself inside it, measures its own frame timing, and restarts itself if the phone kills it.
 
 ## Get the APK (no Android Studio needed)
 
