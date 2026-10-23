@@ -39,6 +39,12 @@ class FoldOverlayView(context: Context) : View(context) {
 
     var mode = Mode.CLOSE
 
+    /**
+     * Concentrato (23 Oct 2026): how much detail this run keeps, 1 for a slow fold, down to
+     * DENSITY_FLOOR for a fast one. Ornament fades with it; the trajectory never does.
+     */
+    var density = 1f
+
     private var p = 0f
     private var alphaAll = 0f
 
@@ -384,6 +390,12 @@ class FoldOverlayView(context: Context) : View(context) {
                 if (mode == Mode.CLOSE) drawFanaleClose(canvas, w, h) else drawFanaleOpen(canvas, w, h)
                 canvas.restoreToCount(c)
             }
+            MotionConfig.Effect.MEMBRANA -> {
+                val c = canvas.save()
+                if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+                if (mode == Mode.CLOSE) drawMembranaClose(canvas, w, h) else drawMembranaOpen(canvas, w, h)
+                canvas.restoreToCount(c)
+            }
         }
 
         canvas.restoreToCount(flip)
@@ -671,9 +683,10 @@ class FoldOverlayView(context: Context) : View(context) {
             ellipse(canvas, glassFrontShader, glassFrontPaint, cx, h * 0.48f, w * 0.14f, h * 0.58f, 0.28f * glow)
         }
         // Sparks of light spill from the seam, carrying the swing outwards on a falling arc
+        // (Concentrato: a fast opening keeps only the trajectory, so no sparks)
         val life = 0.3f
         val u = (t - bt) / life
-        if (u > 0f && u < 1f) {
+        if (density > 0.6f && u > 0f && u < 1f) {
             val dt = u * life
             val a = Math.pow(kotlin.math.sin(Math.PI * min(1f, u * 2.2f)), 0.7).toFloat() * (1f - u)
             for (i in moteDir.indices) {
@@ -1302,7 +1315,7 @@ class FoldOverlayView(context: Context) : View(context) {
         l.scheduleIgnite(0, t, 0.42f, 0.54f, 0.30f, 0.43f, barFromTip = true)
         val bt = MotionConfig.FANALE_LIGHTS_T
         val bloom = FoldMath.smooth(FoldMath.clamp((t - (bt - 0.03f)) / 0.04f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - bt - 0.04f) / 0.16f)))
-        if (bloom > 0f) l.scale(1f + 0.4f * bloom)
+        if (bloom > 0f) l.scale(1f + 0.4f * bloom * density)
 
         val eR = FoldMath.magnetOut(FoldMath.clamp((t - 0.5f) / 0.4f))
         val eL = FoldMath.magnetOut(FoldMath.clamp((t - 0.54f) / 0.38f))
@@ -1377,8 +1390,8 @@ class FoldOverlayView(context: Context) : View(context) {
             // Red light from the lips falling onto the content
             val lipR = min(1f, eR * 6f) * (1f - FoldMath.smooth(FoldMath.clamp((eR - 0.35f) / 0.6f)))
             val lipL = min(1f, eL * 6f) * (1f - FoldMath.smooth(FoldMath.clamp((eL - 0.35f) / 0.6f)))
-            l.glow(canvas, xr, h * 0.5f, w * 0.05f, h * 0.62f, 0.22f * lipR)
-            l.glow(canvas, xl, h * 0.5f, w * 0.05f, h * 0.62f, 0.22f * lipL)
+            l.glow(canvas, xr, h * 0.5f, w * 0.05f, h * 0.62f, 0.22f * lipR * density)
+            l.glow(canvas, xl, h * 0.5f, w * 0.05f, h * 0.62f, 0.22f * lipL * density)
             l.line(canvas, xr, 0f, h, max(1.5f, w * 0.0014f), 0.65f * lipR)
             l.line(canvas, xl, 0f, h, max(1.5f, w * 0.0014f), 0.65f * lipL)
         }
@@ -1392,6 +1405,174 @@ class FoldOverlayView(context: Context) : View(context) {
         canvas.clipRect(if (shut) cx else xr, 0f, w + 1f, h)
         l.draw(canvas, 1, xr - cx, fade)
         canvas.restoreToCount(c)
+    }
+
+    // endregion
+
+    // region Membrana (23 Oct 2026): Bellezza Necessaria
+
+    private val memPath = Path()
+    private val memLayer = Paint()
+    private val memThin = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OUT)
+    }
+    private val memRim = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
+    private val memLens = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OUT)
+    }
+    private var memBlurFor = 0f
+    private val memLensShader = RadialGradient(0f, 0f, 1f, Color.BLACK, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+    // The rim light's fall-off along an edge, built once per rim colour (alpha set on the paint)
+    private var memFor: MotionConfig.Rim? = null
+    private var memCore: Shader? = null
+    private var memGlow: Shader? = null
+    private fun memFall(c: Int) = LinearGradient(0f, 0f, 0f, 1f,
+        intArrayOf(Color.argb(0, Color.red(c), Color.green(c), Color.blue(c)), c or (0xFF shl 24), Color.argb(0, Color.red(c), Color.green(c), Color.blue(c))),
+        floatArrayOf(0.04f, 0.5f, 0.96f), Shader.TileMode.CLAMP)
+
+    /**
+     * One edge of the opening, hung from (x, top) and (x, bottom) and bowed at its middle by
+     * [bow] (positive bows towards +x), the way a membrane hangs between two anchors.
+     */
+    private fun memEdge(path: Path, x: Float, bow: Float, h: Float) {
+        path.moveTo(x, -h * 0.02f)
+        path.quadTo(x + 2f * bow, h * 0.5f, x, h * 1.02f)
+    }
+
+    /**
+     * Draws the membrane: black everywhere except the opening between the left edge (anchor xl,
+     * bow bl) and the right edge (xr, br). Inside a layer, the membrane thins towards the
+     * opening's edges, so the content shows faintly through where it is stretched; then the
+     * rim light runs along each moving edge, brightest at its middle and falling off towards
+     * the anchors.
+     */
+    private fun membrane(canvas: Canvas, w: Float, h: Float, xl: Float, bl: Float, xr: Float, br: Float, rim: Float, lens: Float) {
+        val cx = w / 2f
+        val layer = canvas.saveLayer(0f, 0f, w + 1f, h, memLayer)
+        blackPaint.alpha = 255
+        // The opening, if any: the region between the two edges
+        val open = (xr + br) - (xl + bl) > 0.5f || xr - xl > 0.5f
+        memPath.reset()
+        if (open) {
+            memPath.addRect(0f, 0f, w + 1f, h, Path.Direction.CW)
+            memPath.moveTo(xl, -h * 0.02f)
+            memPath.quadTo(xl + 2f * bl, h * 0.5f, xl, h * 1.02f)
+            memPath.lineTo(xr, h * 1.02f)
+            memPath.quadTo(xr + 2f * br, h * 0.5f, xr, -h * 0.02f)
+            memPath.close()
+            memPath.fillType = Path.FillType.EVEN_ODD
+            canvas.drawPath(memPath, blackPaint)
+        } else {
+            canvas.drawRect(0f, 0f, w + 1f, h, blackPaint)
+        }
+        // The membrane is thinner where it is stretched: a soft translucent band along each edge
+        val thinA = (0.55f * (0.5f + 0.5f * density)).coerceAtMost(0.6f)
+        if (open && thinA > 0.01f) {
+            val bw = w * 0.05f
+            if (memBlurFor != bw) { memThin.maskFilter = android.graphics.BlurMaskFilter(bw * 0.6f, android.graphics.BlurMaskFilter.Blur.NORMAL); memBlurFor = bw }
+            memThin.strokeWidth = bw
+            memThin.alpha = (255 * thinA).toInt()
+            memPath.reset(); memEdge(memPath, xl, bl, h); canvas.drawPath(memPath, memThin)
+            memPath.reset(); memEdge(memPath, xr, br, h); canvas.drawPath(memPath, memThin)
+        }
+        // Tension before it gives: the membrane thins in a lens on the crease
+        if (lens > 0.004f) {
+            m.setScale(w * 0.06f, h * 0.42f); m.postTranslate(cx, h * 0.5f)
+            memLensShader.setLocalMatrix(m)
+            memLens.shader = memLensShader
+            memLens.alpha = (255 * min(1f, lens)).toInt()
+            canvas.drawRect(cx - w * 0.06f, h * 0.08f, cx + w * 0.06f, h * 0.92f, memLens)
+        }
+        canvas.restoreToCount(layer)
+        // The rim light on the moving edges
+        if (rim > 0.004f && open) {
+            val r = MotionConfig.RIM
+            if (memFor != r) { memCore = memFall(r.core); memGlow = memFall(r.glow); memFor = r }
+            m.setScale(1f, h)
+            memCore?.setLocalMatrix(m); memGlow?.setLocalMatrix(m)
+            for (i in 0..1) {
+                val x = if (i == 0) xl else xr
+                val b = if (i == 0) bl else br
+                if (x + 2f * b < -w * 0.02f || x + 2f * b > w * 1.02f) continue
+                memPath.reset(); memEdge(memPath, x, b, h)
+                memRim.shader = memGlow; memRim.alpha = (255 * min(1f, 0.3f * rim * density)).toInt(); memRim.strokeWidth = w * 0.018f
+                canvas.drawPath(memPath, memRim)
+                memRim.shader = memCore; memRim.alpha = (255 * min(1f, 0.9f * rim)).toInt(); memRim.strokeWidth = max(1.5f, w * 0.0016f)
+                canvas.drawPath(memPath, memRim)
+            }
+            memRim.shader = null
+        }
+    }
+
+    /**
+     * Opening. One black membrane over the screen, a fine seam on the crease from the first
+     * frame. Tension builds: the membrane thins in a lens on the crease. It gives: the opening's
+     * middle leads (a lens), the right edge first (the cover was pulled from the right), the
+     * anchors following on the magnetic curves until both edges have left the screen. Being soft,
+     * the edges overshoot a touch and snap taut: the climax, the click, and touch comes back.
+     * Concentrato: a fast opening keeps only the edges' trajectory.
+     */
+    private fun drawMembranaOpen(canvas: Canvas, w: Float, h: Float) {
+        val t = FoldMath.unglide(1f - p)
+        val cx = w / 2f
+        val over = w * 0.03f
+        val aR = FoldMath.magnetOut(FoldMath.clamp((t - 0.14f) / 0.5f))
+        val aL = FoldMath.magnetOut(FoldMath.clamp((t - 0.2f) / 0.48f))
+        val xr = cx + (w - cx + over) * aR
+        val xl = cx - (cx + over) * aL
+        // The middle leads, then relaxes with a soft overshoot as the membrane goes taut
+        fun bow(start: Float): Float {
+            val u = FoldMath.clamp((t - start) / 0.62f)
+            val lead = kotlin.math.sin(Math.PI.toFloat() * u)
+            val snap = -0.16f * kotlin.math.sin(Math.PI.toFloat() * FoldMath.clamp((u - 0.7f) / 0.3f))
+            return w * 0.16f * (lead + snap)
+        }
+        val br = bow(0.08f)
+        val bl = -bow(0.14f)
+        val lens = 0.35f * density * FoldMath.smooth(FoldMath.clamp(t / 0.12f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.12f) / 0.1f)))
+        val rim = FoldMath.smooth(FoldMath.clamp((t - 0.1f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.62f) / 0.16f)))
+        membrane(canvas, w, h, xl, bl, xr, br, rim, lens)
+        // The seam, there from the first frame until the membrane gives
+        val seam = 1f - FoldMath.smooth(FoldMath.clamp((t - 0.1f) / 0.08f))
+        if (seam > 0.004f) {
+            linePaint.color = MotionConfig.RIM.core
+            linePaint.alpha = (255 * 0.55f * seam).toInt()
+            canvas.drawRect(cx - 0.75f, h * 0.06f, cx + 0.75f, h * 0.94f, linePaint)
+            linePaint.color = Color.rgb(233, 223, 200)
+        }
+    }
+
+    /**
+     * Closing. The membrane is drawn in from both edges, the left a beat ahead (the fold travels
+     * left to right), its anchors leading and the middle lagging, so the opening narrows to a
+     * lens. The anchors meet on the crease (the click); surface tension closes the lens into a
+     * seam of light, which shrinks to the last point, dips into the hinge and goes out.
+     */
+    private fun drawMembranaClose(canvas: Canvas, w: Float, h: Float) {
+        val cx = w / 2f
+        val over = w * 0.03f
+        val end = MotionConfig.BUILD_END
+        val aL = FoldMath.clamp(p / end)
+        val aR = FoldMath.clamp((p - 0.025f) / (end - 0.025f))
+        val xl = -over + (cx + over) * aL
+        val xr = w + over - (w - cx + over) * aR
+        val lag = w * 0.12f * FoldMath.smooth(FoldMath.clamp(p / 0.25f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - end) / 0.26f)))
+        val rim = FoldMath.smooth(FoldMath.clamp(p / 0.08f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.08f)))
+        membrane(canvas, w, h, xl, -lag, xr, lag, rim, 0f)
+        // The last point of light: the closed seam gathers to the centre, dips into the hinge, goes out
+        val glint = FoldMath.smooth(FoldMath.clamp((p - 0.76f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.86f) / 0.11f)))
+        if (glint > 0.004f) {
+            val wd = FoldMath.clamp((p - 0.8f) / 0.17f)
+            val gy = h * 0.5f + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
+            val r = MotionConfig.RIM
+            m.setScale(w * 0.05f, w * 0.05f); m.postTranslate(cx, gy)
+            glintShader.setLocalMatrix(m)
+            glintPaint.colorFilter = android.graphics.PorterDuffColorFilter(r.core, android.graphics.PorterDuff.Mode.MULTIPLY)
+            glintPaint.alpha = (255 * glint).toInt()
+            canvas.drawRect(cx - w * 0.05f, gy - w * 0.05f, cx + w * 0.05f, gy + w * 0.05f, glintPaint)
+            glintPaint.colorFilter = null
+        }
     }
 
     // endregion

@@ -520,7 +520,11 @@ class FoldMotionService : Service(), SensorEventListener {
         else -> 0f
     }
 
+    /** When the cover was blacked out for an opening: the start of Concentrato's speed reading. */
+    private var armedAt = 0L
+
     private fun enter(next: Phase) {
+        if (next == Phase.ARMED) armedAt = SystemClock.uptimeMillis()
         if (animScale() <= 0f) { finish(); return }
         phase = next
         phaseAt = SystemClock.uptimeMillis()
@@ -544,6 +548,9 @@ class FoldMotionService : Service(), SensorEventListener {
         val plan = Plan.make(predicted?.let { it }, scale)
         finaleAt = plan.buildMs
         finaleMs = plan.finaleMs
+        // Concentrato: less time to build means a faster close, so fewer details
+        val full = (MotionConfig.EFFECT_MS - MotionConfig.FINALE_MS).toFloat() * scale.coerceAtLeast(0.01f)
+        overlay?.density = density(FoldMath.clamp((finaleAt - 60f) / (full - 60f).coerceAtLeast(1f)))
         finaleFromP = MotionConfig.BUILD_END
         playMs = finaleAt + finaleMs
         EventLog.add(
@@ -602,6 +609,11 @@ class FoldMotionService : Service(), SensorEventListener {
             return
         }
         revealMs = MotionConfig.REVEAL_MS * animScale().coerceAtLeast(0.01f)
+        // Concentrato: how fast the phone was opened, from the hinge passing 90 degrees to the switch
+        val openMs = switchedAt - armedAt
+        overlay?.density = if (armedAt <= 0L || openMs < 30L) density(0.6f)
+            else density(FoldMath.clamp((openMs - MotionConfig.OPEN_FAST_MS).toFloat() / (MotionConfig.OPEN_SLOW_MS - MotionConfig.OPEN_FAST_MS)))
+        EventLog.add(this, "Concentrato: opened in ${openMs}ms, detail ${((overlay?.density ?: 1f) * 100).roundToInt()}%")
         stats.reset()
         overlay?.drawCount = 0
         firstRevealFrameLogged = false
@@ -625,6 +637,11 @@ class FoldMotionService : Service(), SensorEventListener {
         mainHandler.postDelayed(revealDeadline, revealMs.toLong() + MotionConfig.REVEAL_GRACE_MS + MotionConfig.PANEL_WAIT_MAX_MS)
         EventLog.add(this, "Revealing (display state ${display?.state ?: -1})")
     }
+
+    /** Maps slowness (0 fast, 1 slow) to how much detail the transition keeps. */
+    private fun density(slowness: Float): Float =
+        if (!MotionConfig.concentrato(this)) 1f
+        else MotionConfig.DENSITY_FLOOR + (1f - MotionConfig.DENSITY_FLOOR) * FoldMath.smooth(slowness)
 
     private fun saveRun(completedPercent: Int) {
         val r = stats.result()
@@ -668,7 +685,11 @@ class FoldMotionService : Service(), SensorEventListener {
                 stats.onFrame(frameTimeNanos)
                 // Haptics timed to the light: tick as the blades start, click on the pulse
                 if (!tickDone && p >= MotionConfig.TICK_AT) { tickDone = true; haptics.tick() }
-                val clickP = if (MotionConfig.CLOSING_EFFECT == MotionConfig.Effect.FANALE) MotionConfig.FANALE_CONTACT_P else MotionConfig.CLICK_AT
+                val clickP = when (MotionConfig.CLOSING_EFFECT) {
+                    MotionConfig.Effect.FANALE -> MotionConfig.FANALE_CONTACT_P
+                    MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_CONTACT_P
+                    else -> MotionConfig.CLICK_AT
+                }
                 if (!clickDone && p >= clickP) { clickDone = true; haptics.click() }
                 if (k >= 1f) {
                     saveRun(100)
@@ -714,6 +735,7 @@ class FoldMotionService : Service(), SensorEventListener {
                     MotionConfig.Effect.SIGNATURE -> MotionConfig.SIGNATURE_BREAK_T
                     MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS, MotionConfig.Effect.LAMP_GLASS -> MotionConfig.FRAME_SEAT_T
                     MotionConfig.Effect.FANALE -> MotionConfig.FANALE_LIGHTS_T
+                    MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_TAUT_T
                     else -> 2f
                 }
                 // Charter rule 5: touch comes back the moment the content is complete. At the
@@ -721,6 +743,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 val touchAt = when (opening) {
                     MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS, MotionConfig.Effect.LAMP_GLASS -> MotionConfig.FRAME_SEAT_T
                     MotionConfig.Effect.FANALE -> MotionConfig.FANALE_TOUCH_T
+                    MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_TAUT_T
                     else -> 2f
                 }
                 // k is real time: the effects draw on unglide(glide(k)), which is k
