@@ -29,7 +29,7 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS, LAMP_GLASS, FANALE }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS, LAMP_GLASS, FANALE, MEMBRANA }
 
     /**
      * The pairings Mechack chooses between in the app (23 Oct 2026). Each names its closing and
@@ -39,7 +39,37 @@ object MotionConfig {
         VISCONTI("Visconti", "Lacquer arch closing, lit glass opening", Effect.ARCH_APERTURE, Effect.LIT_GLASS),
         GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.ARCH_APERTURE, Effect.LAMP_GLASS),
         FANALE("Fanale", "Alfa Romeo only: the lamps light, part and lock", Effect.FANALE, Effect.FANALE),
+        MEMBRANA("Membrana", "One living membrane parts on curves and snaps taut", Effect.MEMBRANA, Effect.MEMBRANA),
     }
+
+    /** The colour of Membrana's rim light: glow and core. */
+    enum class Rim(val label: String, val glow: Int, val core: Int) {
+        CHAMPAGNE("Champagne", android.graphics.Color.rgb(217, 187, 134), android.graphics.Color.rgb(255, 240, 214)),
+        ROSSO("Rosso", android.graphics.Color.rgb(232, 22, 32), android.graphics.Color.rgb(255, 132, 114)),
+        VISCONTI("Visconti", android.graphics.Color.rgb(40, 200, 112), android.graphics.Color.rgb(214, 242, 218)),
+    }
+
+    fun rim(context: android.content.Context): Rim = runCatching {
+        Rim.valueOf(context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString("rim", null)!!)
+    }.getOrDefault(Rim.CHAMPAGNE)
+
+    fun setRim(context: android.content.Context, r: Rim) {
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putString("rim", r.name).apply()
+        RIM = r
+    }
+
+    /**
+     * Concentrato (Bellezza Necessaria, principle 2): the faster the fold, the emptier the
+     * transition. On by default; off keeps every detail at every speed.
+     */
+    fun concentrato(context: android.content.Context) =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getBoolean("concentrato", true)
+
+    fun setConcentrato(context: android.content.Context, on: Boolean) =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean("concentrato", on).apply()
+
+    var RIM = Rim.CHAMPAGNE
+        private set
 
     private const val PREFS = "fold_motion"
     private const val STYLE_KEY = "style"
@@ -58,6 +88,7 @@ object MotionConfig {
         val s = style(context)
         CLOSING_EFFECT = s.closing
         OPENING_EFFECT = s.opening
+        RIM = rim(context)
     }
 
     /** Closing effect; set from the chosen style. Arch Aperture since 16 Oct 2026 (night). */
@@ -79,6 +110,23 @@ object MotionConfig {
     const val FANALE_LIGHTS_T = 0.54f
     const val FANALE_TOUCH_T = 0.8f
     const val FANALE_CONTACT_P = 0.545f
+
+    /**
+     * Membrana, as shares of the reveal's time: the membrane snaps taut at TAUT_T (the haptic
+     * click, and touch returns). Closing: the edges meet at CONTACT_P.
+     */
+    const val MEMBRANA_TAUT_T = 0.7f
+    const val MEMBRANA_CONTACT_P = 0.545f
+
+    /**
+     * Concentrato's speed scale. Opening: the time from the hinge passing 90 degrees to One UI
+     * switching (fast at or under FAST, slow at or over SLOW). Closing: the build-up time the
+     * plan has, which follows how quickly this owner usually closes.
+     */
+    const val OPEN_FAST_MS = 140L
+    const val OPEN_SLOW_MS = 520L
+    /** Fewest details Concentrato keeps: the trajectory always stays. */
+    const val DENSITY_FLOOR = 0.25f
 
     /**
      * Nave of Light: reveal progress at which the darkness starts lifting. The ribs
