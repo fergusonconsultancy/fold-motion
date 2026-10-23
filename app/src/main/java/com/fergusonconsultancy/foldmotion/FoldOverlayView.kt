@@ -1568,7 +1568,7 @@ class FoldOverlayView(context: Context) : View(context) {
             val r = MotionConfig.RIM
             m.setScale(w * 0.05f, w * 0.05f); m.postTranslate(cx, gy)
             glintShader.setLocalMatrix(m)
-            glintPaint.colorFilter = android.graphics.PorterDuffColorFilter(r.core, android.graphics.PorterDuff.Mode.MODULATE)
+            glintPaint.colorFilter = android.graphics.PorterDuffColorFilter(r.core, android.graphics.PorterDuff.Mode.MULTIPLY)
             glintPaint.alpha = (255 * glint).toInt()
             canvas.drawRect(cx - w * 0.05f, gy - w * 0.05f, cx + w * 0.05f, gy + w * 0.05f, glintPaint)
             glintPaint.colorFilter = null
