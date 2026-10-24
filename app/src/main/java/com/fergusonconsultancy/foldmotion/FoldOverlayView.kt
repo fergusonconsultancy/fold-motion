@@ -223,6 +223,16 @@ class FoldOverlayView(context: Context) : View(context) {
 
     // Time of day (charter): the effect's light, never the content beneath. Null by day.
     private var todPaint: Paint? = null
+    private var todBright = 1f
+    private var todSepia = 0f
+
+    /**
+     * Brightness of this run's light (24 Oct 2026, set from the app): a multiplier on every
+     * colour the effect draws. Black stays black, so only the light changes; above 1 the
+     * brightest highlights saturate, which reads as more vivid.
+     */
+    var brightness = 1f
+        set(v) { if (field != v) { field = v; rebuildFilter() } }
 
     /** Sets the light for the hour: night warmer and about a third dimmer, evening between. */
     fun setTimeOfDay(hour: Int) {
@@ -231,7 +241,14 @@ class FoldOverlayView(context: Context) : View(context) {
             in 18..21 -> 0.88f to 0.12f
             else -> 0.68f to 0.22f
         }
-        if (sepia == 0f) { todPaint = null; return }
+        todBright = bright; todSepia = sepia
+        rebuildFilter()
+    }
+
+    private fun rebuildFilter() {
+        val sepia = todSepia
+        val bright = todBright * brightness
+        if (sepia == 0f && bright == 1f) { todPaint = null; return }
         val k = 1f - sepia
         val cm = android.graphics.ColorMatrix(floatArrayOf(
             k + sepia * 0.393f, sepia * 0.769f, sepia * 0.189f, 0f, 0f,
@@ -239,7 +256,11 @@ class FoldOverlayView(context: Context) : View(context) {
             sepia * 0.272f, sepia * 0.534f, k + sepia * 0.131f, 0f, 0f,
             0f, 0f, 0f, 1f, 0f
         ))
-        cm.postConcat(android.graphics.ColorMatrix().apply { setScale(bright, bright, bright, 1f) })
+        // Above 1, translucent light (glows, halos, rims) also gains strength: opaque black stays
+        // opaque and clear stays clear, so only the light grows. Below 1, colour alone dims, so
+        // the dark of the effect never turns see-through
+        val alphaGain = if (brightness > 1f) brightness else 1f
+        cm.postConcat(android.graphics.ColorMatrix().apply { setScale(bright, bright, bright, alphaGain) })
         todPaint = Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(cm) }
     }
     private val frameStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -388,6 +409,13 @@ class FoldOverlayView(context: Context) : View(context) {
                 val c = canvas.save()
                 if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
                 if (mode == Mode.CLOSE) drawFanaleClose(canvas, w, h) else drawFanaleOpen(canvas, w, h)
+                canvas.restoreToCount(c)
+            }
+            MotionConfig.Effect.FANALE_REVERSE -> {
+                // The Fanale closing, played backwards: the reveal runs p from 1 down to 0
+                val c = canvas.save()
+                if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+                drawFanaleClose(canvas, w, h)
                 canvas.restoreToCount(c)
             }
             MotionConfig.Effect.MEMBRANA -> {

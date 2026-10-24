@@ -29,7 +29,7 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS, LAMP_GLASS, FANALE, MEMBRANA }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS, LAMP_GLASS, FANALE, MEMBRANA, FANALE_REVERSE }
 
     /**
      * The pairings Mechack chooses between in the app (23 Oct 2026). Each names its closing and
@@ -78,16 +78,67 @@ object MotionConfig {
         Style.valueOf(context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(STYLE_KEY, null)!!)
     }.getOrDefault(Style.VISCONTI)
 
+    /** A preset: sets the opening and the closing together. */
     fun setStyle(context: android.content.Context, s: Style) {
-        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putString(STYLE_KEY, s.name).apply()
+        prefs(context).edit().putString(STYLE_KEY, s.name).putString(OPENING_KEY, s.opening.name).putString(CLOSING_KEY, s.closing.name).apply()
         apply(context)
     }
 
-    /** Reads the chosen style into the effects the overlay draws. */
+    // ---- Fine tuning (24 Oct 2026): opening and closing chosen and tuned separately ----------
+
+    /** The openings offered in the app. */
+    enum class Opening(val label: String, val detail: String, val effect: Effect) {
+        LIT_GLASS("Lit glass", "Dark glass with Visconti light inside it parts into a lit bezel", Effect.LIT_GLASS),
+        GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.LAMP_GLASS),
+        FANALE("Fanale", "The lamps light in sequence, bloom, and the halves part", Effect.FANALE),
+        FANALE_REVERSE("Fanale reversed", "The Fanale closing played backwards: a point of light rises from the hinge and the lamps come on as the halves part", Effect.FANALE_REVERSE),
+        MEMBRANA("Membrana", "One membrane parts on curves and snaps taut", Effect.MEMBRANA),
+    }
+
+    /** The closings offered in the app. */
+    enum class Closing(val label: String, val detail: String, val effect: Effect) {
+        ARCH("Lacquer arch", "A lacquer arch closes in on the crease; the last light dips into the hinge", Effect.ARCH_APERTURE),
+        FANALE("Fanale", "Locking the car: the lit halves meet and the lamps go out like an indicator", Effect.FANALE),
+        MEMBRANA("Membrana", "The membrane is drawn in to a lens that seals into a last point of light", Effect.MEMBRANA),
+    }
+
+    private const val OPENING_KEY = "opening_effect"
+    private const val CLOSING_KEY = "closing_effect"
+    private fun prefs(c: android.content.Context) = c.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+
+    fun opening(c: android.content.Context): Opening =
+        Opening.entries.firstOrNull { it.effect.name == prefs(c).getString(OPENING_KEY, null) }
+            ?: Opening.entries.first { it.effect == style(c).opening }
+
+    fun closing(c: android.content.Context): Closing =
+        Closing.entries.firstOrNull { it.effect.name == prefs(c).getString(CLOSING_KEY, null) }
+            ?: Closing.entries.first { it.effect == style(c).closing }
+
+    fun setOpening(c: android.content.Context, o: Opening) { prefs(c).edit().putString(OPENING_KEY, o.effect.name).apply(); apply(c) }
+    fun setClosing(c: android.content.Context, k: Closing) { prefs(c).edit().putString(CLOSING_KEY, k.effect.name).apply(); apply(c) }
+
+    /** The preset matching the chosen opening and closing, if any. */
+    fun matchingStyle(c: android.content.Context): Style? = Style.entries.firstOrNull { it.opening == opening(c).effect && it.closing == closing(c).effect }
+
+    /**
+     * Brightness of the light (a multiplier: 0.6 dim to 1.6 vivid) and speed (1 as designed,
+     * above 1 quicker, below 1 slower), each for the opening and the closing.
+     */
+    fun openBrightness(c: android.content.Context) = prefs(c).getFloat("open_brightness", 1f)
+    fun closeBrightness(c: android.content.Context) = prefs(c).getFloat("close_brightness", 1f)
+    fun openSpeed(c: android.content.Context) = prefs(c).getFloat("open_speed", 1f)
+    fun closeSpeed(c: android.content.Context) = prefs(c).getFloat("close_speed", 1f)
+    fun setTuning(c: android.content.Context, key: String, v: Float) = prefs(c).edit().putFloat(key, v).apply()
+
+    const val BRIGHTNESS_MIN = 0.6f
+    const val BRIGHTNESS_MAX = 1.6f
+    const val SPEED_MIN = 0.7f
+    const val SPEED_MAX = 1.4f
+
+    /** Reads the chosen opening and closing into the effects the overlay draws. */
     fun apply(context: android.content.Context) {
-        val s = style(context)
-        CLOSING_EFFECT = s.closing
-        OPENING_EFFECT = s.opening
+        CLOSING_EFFECT = closing(context).effect
+        OPENING_EFFECT = opening(context).effect
         RIM = rim(context)
     }
 
@@ -117,6 +168,13 @@ object MotionConfig {
      */
     const val MEMBRANA_TAUT_T = 0.7f
     const val MEMBRANA_CONTACT_P = 0.545f
+
+    /**
+     * Fanale reversed, as shares of the reveal's time: the closing's contact (p = 0.545) comes at
+     * about 0.48 of the reveal (the click), and touch returns at 0.75, the halves nearly gone.
+     */
+    const val FANALE_REVERSE_CLICK_T = 0.48f
+    const val FANALE_REVERSE_TOUCH_T = 0.75f
 
     /**
      * Concentrato's speed scale. Opening: the time from the hinge passing 90 degrees to One UI
