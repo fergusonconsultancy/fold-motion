@@ -1315,7 +1315,7 @@ class FoldOverlayView(context: Context) : View(context) {
         l.scheduleIgnite(0, t, 0.42f, 0.54f, 0.30f, 0.43f, barFromTip = true)
         val bt = MotionConfig.FANALE_LIGHTS_T
         val bloom = FoldMath.smooth(FoldMath.clamp((t - (bt - 0.03f)) / 0.04f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - bt - 0.04f) / 0.16f)))
-        if (bloom > 0f) l.scale(1f + 0.4f * bloom * density)
+        if (bloom > 0f) l.scale(1f + 0.25f * bloom * density)
 
         val eR = FoldMath.magnetOut(FoldMath.clamp((t - 0.5f) / 0.4f))
         val eL = FoldMath.magnetOut(FoldMath.clamp((t - 0.54f) / 0.38f))
@@ -1496,7 +1496,7 @@ class FoldOverlayView(context: Context) : View(context) {
                 val b = if (i == 0) bl else br
                 if (x + 2f * b < -w * 0.02f || x + 2f * b > w * 1.02f) continue
                 memPath.reset(); memEdge(memPath, x, b, h)
-                memRim.shader = memGlow; memRim.alpha = (255 * min(1f, 0.3f * rim * density)).toInt(); memRim.strokeWidth = w * 0.018f
+                memRim.shader = memGlow; memRim.alpha = (255 * min(1f, 0.22f * rim * density)).toInt(); memRim.strokeWidth = w * 0.011f
                 canvas.drawPath(memPath, memRim)
                 memRim.shader = memCore; memRim.alpha = (255 * min(1f, 0.9f * rim)).toInt(); memRim.strokeWidth = max(1.5f, w * 0.0016f)
                 canvas.drawPath(memPath, memRim)
@@ -1525,12 +1525,13 @@ class FoldOverlayView(context: Context) : View(context) {
         fun bow(start: Float): Float {
             val u = FoldMath.clamp((t - start) / 0.62f)
             val lead = kotlin.math.sin(Math.PI.toFloat() * u)
-            val snap = -0.16f * kotlin.math.sin(Math.PI.toFloat() * FoldMath.clamp((u - 0.7f) / 0.3f))
+            // 24 Oct 2026: a smaller snap, so it settles taut rather than wobbling
+            val snap = -0.07f * kotlin.math.sin(Math.PI.toFloat() * FoldMath.clamp((u - 0.7f) / 0.3f))
             return w * 0.16f * (lead + snap)
         }
         val br = bow(0.08f)
         val bl = -bow(0.14f)
-        val lens = 0.35f * density * FoldMath.smooth(FoldMath.clamp(t / 0.12f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.12f) / 0.1f)))
+        val lens = 0.2f * density * FoldMath.smooth(FoldMath.clamp(t / 0.12f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.12f) / 0.1f)))
         val rim = FoldMath.smooth(FoldMath.clamp((t - 0.1f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.62f) / 0.16f)))
         membrane(canvas, w, h, xl, bl, xr, br, rim, lens)
         // The seam, there from the first frame until the membrane gives
