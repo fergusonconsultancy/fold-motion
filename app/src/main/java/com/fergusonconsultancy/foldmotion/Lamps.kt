@@ -138,6 +138,34 @@ class Lamps(rosso: Boolean) {
         for (j in 0 until BAR_BEADS) lv[RING_BEADS + j] = extinguish(t, b0 + (b1 - b0) * j / (BAR_BEADS - 1f))
     }
 
+    /**
+     * Circuito: the light starts at each lamp's outer edge (9 o'clock on the left lamp, 3 o'clock
+     * on the right) and runs round both sides of the ring at once, over the top and under the
+     * bottom, the two heads meeting where the bar leaves the ring; then on along the bar to its
+     * tip. Both lamps run the same schedule, so they move as mirror images. [out] runs the same
+     * path going dark instead of lighting.
+     */
+    fun scheduleCircuit(side: Int, t: Float, r0: Float, r1: Float, b0: Float, b1: Float, out: Boolean = false) {
+        val lv = level[side]
+        val start = if (side == 0) Math.PI.toFloat() else 0f
+        val twoPi = 2f * Math.PI.toFloat()
+        for (i in 0 until RING_BEADS) {
+            var d = (ringAngle(side, i) - start) % twoPi
+            if (d < 0f) d += twoPi
+            if (d > Math.PI.toFloat()) d = twoPi - d
+            val at = r0 + (r1 - r0) * d / Math.PI.toFloat()
+            lv[i] = if (out) extinguish(t, at) else ignite(t, at)
+        }
+        for (j in 0 until BAR_BEADS) {
+            val at = b0 + (b1 - b0) * j / (BAR_BEADS - 1f)
+            lv[RING_BEADS + j] = if (out) extinguish(t, at) else ignite(t, at)
+        }
+    }
+
+    /** Where a bar's tip sits (screen x), for the light that crosses the gap to the crease. */
+    fun tipX(side: Int, offset: Float) = beadX(side, RING_BEADS + BAR_BEADS - 1, offset)
+    val barLine get() = barY
+
     fun fillAll(v: Float) { for (s in 0..1) level[s].fill(v) }
 
     /** Multiplies every bead (a bloom or a fade). */

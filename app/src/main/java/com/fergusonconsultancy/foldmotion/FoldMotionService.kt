@@ -691,7 +691,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 // Haptics timed to the light: tick as the blades start, click on the pulse
                 if (!tickDone && p >= MotionConfig.TICK_AT) { tickDone = true; haptics.tick() }
                 val clickP = when (MotionConfig.CLOSING_EFFECT) {
-                    MotionConfig.Effect.FANALE -> MotionConfig.FANALE_CONTACT_P
+                    MotionConfig.Effect.FANALE, MotionConfig.Effect.CIRCUITO -> MotionConfig.FANALE_CONTACT_P
                     MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_CONTACT_P
                     else -> MotionConfig.CLICK_AT
                 }
@@ -742,6 +742,7 @@ class FoldMotionService : Service(), SensorEventListener {
                     MotionConfig.Effect.FANALE -> MotionConfig.FANALE_LIGHTS_T
                     MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_TAUT_T
                     MotionConfig.Effect.FANALE_REVERSE -> MotionConfig.FANALE_REVERSE_CLICK_T
+                    MotionConfig.Effect.CIRCUITO -> MotionConfig.CIRCUITO_MEET_T
                     else -> 2f
                 }
                 // Charter rule 5: touch comes back the moment the content is complete. At the
@@ -751,6 +752,7 @@ class FoldMotionService : Service(), SensorEventListener {
                     MotionConfig.Effect.FANALE -> MotionConfig.FANALE_TOUCH_T
                     MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_TAUT_T
                     MotionConfig.Effect.FANALE_REVERSE -> MotionConfig.FANALE_REVERSE_TOUCH_T
+                    MotionConfig.Effect.CIRCUITO -> MotionConfig.CIRCUITO_TOUCH_T
                     else -> 2f
                 }
                 // k is real time: the effects draw on unglide(glide(k)), which is k
