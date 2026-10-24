@@ -44,9 +44,9 @@ object MotionConfig {
 
     /** The colour of Membrana's rim light: glow and core. */
     enum class Rim(val label: String, val glow: Int, val core: Int) {
-        CHAMPAGNE("Champagne", android.graphics.Color.rgb(217, 187, 134), android.graphics.Color.rgb(255, 240, 214)),
-        ROSSO("Rosso", android.graphics.Color.rgb(232, 22, 32), android.graphics.Color.rgb(255, 132, 114)),
-        VISCONTI("Visconti", android.graphics.Color.rgb(40, 200, 112), android.graphics.Color.rgb(214, 242, 218)),
+        CHAMPAGNE("Champagne", android.graphics.Color.rgb(236, 196, 120), android.graphics.Color.rgb(255, 244, 222)),
+        ROSSO("Rosso", android.graphics.Color.rgb(246, 20, 34), android.graphics.Color.rgb(255, 118, 98)),
+        VISCONTI("Visconti", android.graphics.Color.rgb(36, 222, 120), android.graphics.Color.rgb(200, 255, 214)),
     }
 
     fun rim(context: android.content.Context): Rim = runCatching {

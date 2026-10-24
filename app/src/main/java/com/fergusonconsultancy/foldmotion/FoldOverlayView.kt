@@ -188,10 +188,10 @@ class FoldOverlayView(context: Context) : View(context) {
     // ---- Lit Glass: unit radial lights, positioned and stretched with the shared matrix
     private fun radial(colors: IntArray, stops: FloatArray) = RadialGradient(0f, 0f, 1f, colors, stops, Shader.TileMode.CLAMP)
     private val glassInnerShader = radial(
-        intArrayOf(Color.argb(158, 22, 128, 72), Color.argb(107, 10, 86, 46), Color.argb(0, 0, 24, 12)), floatArrayOf(0f, 0.45f, 1f))
+        intArrayOf(Color.argb(206, 26, 160, 86), Color.argb(140, 12, 104, 54), Color.argb(0, 0, 24, 12)), floatArrayOf(0f, 0.45f, 1f))
     private val glassInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glassInnerShader }
     private val glassFrontShader = radial(
-        intArrayOf(Color.argb(255, 214, 240, 214), Color.argb(128, 60, 190, 112), Color.argb(0, 40, 170, 96)), floatArrayOf(0f, 0.35f, 1f))
+        intArrayOf(Color.argb(255, 214, 255, 224), Color.argb(176, 46, 222, 122), Color.argb(0, 36, 200, 110)), floatArrayOf(0f, 0.35f, 1f))
     private val glassFrontPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glassFrontShader }
     private val glassCornerShader = radial(
         intArrayOf(Color.argb(255, 226, 242, 224), Color.argb(93, 40, 190, 108), Color.argb(0, 40, 190, 108)), floatArrayOf(0f, 0.35f, 1f))
@@ -670,9 +670,10 @@ class FoldOverlayView(context: Context) : View(context) {
             val fade = min(1f, b / bezel * 1.5f)
             framePath.reset()
             archWindow(framePath, xb, top, xa, h, rad, top * 0.7f)
-            strokeGlass(canvas, Color.rgb(40, 190, 108), 0.1f * lit * fade, w * 0.05f)
-            strokeGlass(canvas, Color.rgb(40, 200, 112), 0.32f * lit * fade, w * 0.016f)
-            strokeGlass(canvas, Color.rgb(230, 242, 226), (0.55f + 0.4f * lit) * fade, max(1.5f, w * 0.003f))
+            // 24 Oct 2026: a more vibrant edge, a wider luminous halo and a full-strength line
+            strokeGlass(canvas, Color.rgb(36, 222, 120), 0.2f * lit * fade, w * 0.05f)
+            strokeGlass(canvas, Color.rgb(36, 222, 120), 0.5f * lit * fade, w * 0.016f)
+            strokeGlass(canvas, Color.rgb(226, 255, 232), (0.75f + 0.25f * lit) * fade, max(1.5f, w * 0.0032f))
         }
         // Break-away: a soft breath of light at the crease as the hold gives
         val bt = MotionConfig.FRAME_BREAK_T
@@ -1496,9 +1497,15 @@ class FoldOverlayView(context: Context) : View(context) {
                 val b = if (i == 0) bl else br
                 if (x + 2f * b < -w * 0.02f || x + 2f * b > w * 1.02f) continue
                 memPath.reset(); memEdge(memPath, x, b, h)
-                memRim.shader = memGlow; memRim.alpha = (255 * min(1f, 0.22f * rim * density)).toInt(); memRim.strokeWidth = w * 0.011f
+                // Opening (24 Oct 2026): a vibrant rim, a wide soft bloom under a brighter glow; closing stays restrained
+                val vivid = mode == Mode.OPEN
+                if (vivid) {
+                    memRim.shader = memGlow; memRim.alpha = (255 * min(1f, 0.2f * rim * density)).toInt(); memRim.strokeWidth = w * 0.045f
+                    canvas.drawPath(memPath, memRim)
+                }
+                memRim.shader = memGlow; memRim.alpha = (255 * min(1f, (if (vivid) 0.6f else 0.22f) * rim * density)).toInt(); memRim.strokeWidth = w * (if (vivid) 0.016f else 0.011f)
                 canvas.drawPath(memPath, memRim)
-                memRim.shader = memCore; memRim.alpha = (255 * min(1f, 0.9f * rim)).toInt(); memRim.strokeWidth = max(1.5f, w * 0.0016f)
+                memRim.shader = memCore; memRim.alpha = (255 * min(1f, (if (vivid) 1f else 0.9f) * rim)).toInt(); memRim.strokeWidth = max(1.5f, w * (if (vivid) 0.0022f else 0.0016f))
                 canvas.drawPath(memPath, memRim)
             }
             memRim.shader = null

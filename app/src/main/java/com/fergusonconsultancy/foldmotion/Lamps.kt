@@ -32,11 +32,12 @@ class Lamps(rosso: Boolean) {
         const val BAR_BEADS = 15
         const val EMBER = 0.1f
         /** Brightness of a lit bead once its flare has passed. */
-        const val LIT = 0.74f
+        /** Brightness of a lit bead once its flare has passed (24 Oct 2026: brighter, for a more vibrant opening). */
+        const val LIT = 0.9f
     }
 
-    private val glowRgb = if (rosso) Color.rgb(232, 22, 32) else Color.rgb(40, 200, 112)
-    private val coreRgb = if (rosso) Color.rgb(255, 132, 114) else Color.rgb(214, 242, 218)
+    private val glowRgb = if (rosso) Color.rgb(246, 20, 34) else Color.rgb(36, 222, 120)
+    private val coreRgb = if (rosso) Color.rgb(255, 118, 98) else Color.rgb(200, 255, 214)
     private val bodyRgb = if (rosso) Color.rgb(150, 6, 18) else Color.rgb(10, 96, 52)
 
     private fun radial(rgb: Int, mid: Int) = RadialGradient(
@@ -49,7 +50,7 @@ class Lamps(rosso: Boolean) {
         floatArrayOf(0f, 0.38f, 1f), Shader.TileMode.CLAMP
     )
 
-    private val glowShader = radial(glowRgb, 100)
+    private val glowShader = radial(glowRgb, 140)
     private val bodyShader = radial(bodyRgb, 60)
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = glowShader }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = bodyShader }
