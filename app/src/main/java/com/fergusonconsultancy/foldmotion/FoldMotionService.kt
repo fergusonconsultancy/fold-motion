@@ -545,7 +545,10 @@ class FoldMotionService : Service(), SensorEventListener {
         // Planned backwards from when this owner's closes usually switch to the cover:
         // the finale always gets its full length and lands just before the switch
         val predicted = Timing.predictedSwitchMs(this)
-        val plan = Plan.make(predicted?.let { it }, scale)
+        // Speed (set in the app) shortens or lengthens the plan; the switch still caps it
+        val speed = MotionConfig.closeSpeed(this).coerceIn(MotionConfig.SPEED_MIN, MotionConfig.SPEED_MAX)
+        overlay?.brightness = MotionConfig.closeBrightness(this)
+        val plan = Plan.make(predicted?.let { it }, scale / speed)
         finaleAt = plan.buildMs
         finaleMs = plan.finaleMs
         // Concentrato: less time to build means a faster close, so fewer details
@@ -608,7 +611,9 @@ class FoldMotionService : Service(), SensorEventListener {
             EventLog.add(this, "Opened onto the lock screen: reveal waits for unlock")
             return
         }
-        revealMs = MotionConfig.REVEAL_MS * animScale().coerceAtLeast(0.01f)
+        revealMs = MotionConfig.REVEAL_MS * animScale().coerceAtLeast(0.01f) /
+            MotionConfig.openSpeed(this).coerceIn(MotionConfig.SPEED_MIN, MotionConfig.SPEED_MAX)
+        overlay?.brightness = MotionConfig.openBrightness(this)
         // Concentrato: how fast the phone was opened, from the hinge passing 90 degrees to the switch
         val openMs = switchedAt - armedAt
         overlay?.density = if (armedAt <= 0L || openMs < 30L) density(0.6f)
@@ -736,6 +741,7 @@ class FoldMotionService : Service(), SensorEventListener {
                     MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS, MotionConfig.Effect.LAMP_GLASS -> MotionConfig.FRAME_SEAT_T
                     MotionConfig.Effect.FANALE -> MotionConfig.FANALE_LIGHTS_T
                     MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_TAUT_T
+                    MotionConfig.Effect.FANALE_REVERSE -> MotionConfig.FANALE_REVERSE_CLICK_T
                     else -> 2f
                 }
                 // Charter rule 5: touch comes back the moment the content is complete. At the
@@ -744,6 +750,7 @@ class FoldMotionService : Service(), SensorEventListener {
                     MotionConfig.Effect.FRAME_OF_LIGHT, MotionConfig.Effect.LIT_GLASS, MotionConfig.Effect.LAMP_GLASS -> MotionConfig.FRAME_SEAT_T
                     MotionConfig.Effect.FANALE -> MotionConfig.FANALE_TOUCH_T
                     MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_TAUT_T
+                    MotionConfig.Effect.FANALE_REVERSE -> MotionConfig.FANALE_REVERSE_TOUCH_T
                     else -> 2f
                 }
                 // k is real time: the effects draw on unglide(glide(k)), which is k

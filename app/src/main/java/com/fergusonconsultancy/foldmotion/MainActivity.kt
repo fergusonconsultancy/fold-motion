@@ -44,7 +44,12 @@ class MainActivity : Activity(), SensorEventListener {
     private var hingeSensor: Sensor? = null
     private lateinit var screen: Screen
     private lateinit var stage: Stage
-    private lateinit var styleDetail: TextView
+    private lateinit var presets: Chips
+    private lateinit var presetDetail: TextView
+    private lateinit var openingChips: Chips
+    private lateinit var openingDetail: TextView
+    private lateinit var closingChips: Chips
+    private lateinit var closingDetail: TextView
     private lateinit var rimBlock: LinearLayout
     private lateinit var overlayRow: Row
     private lateinit var overlayValue: TextView
@@ -67,19 +72,42 @@ class MainActivity : Activity(), SensorEventListener {
         stage = Stage(this)
         screen.add(stage, px(26))
 
-        // ---- Style
+        // ---- Presets: a matched opening and closing in one tap
         screen.section("Transition")
         val styles = MotionConfig.Style.entries
-        styleDetail = text(MotionConfig.style(this).detail, 13.5f, Kit.MUTED).apply { tag = SECONDARY; setPadding(px(4), px(10), 0, 0) }
-        screen.add(Segmented(this, styles.map { it.label }, styles.indexOf(MotionConfig.style(this))) { i ->
+        presets = Chips(this, styles.map { it.label }, styles.indexOf(MotionConfig.matchingStyle(this))) { i ->
             MotionConfig.setStyle(this, styles[i])
-            styleDetail.text = styles[i].detail
-            showRim(styles[i] == MotionConfig.Style.MEMBRANA)
-            stage.play(open = true)
-        })
-        screen.add(styleDetail)
+            openingChips.select(MotionConfig.Opening.entries.indexOf(MotionConfig.opening(this)))
+            closingChips.select(MotionConfig.Closing.entries.indexOf(MotionConfig.closing(this)))
+            describe(); showRim(); stage.play(open = true)
+        }
+        screen.add(presets)
+        presetDetail = text("", 13.5f, Kit.MUTED).apply { tag = SECONDARY; setPadding(px(4), px(10), 0, 0) }
+        screen.add(presetDetail)
 
-        // Membrana's rim colour: only there when Membrana is (principle 3)
+        // ---- Opening: its own effect, brightness and speed
+        screen.section("Opening")
+        val openings = MotionConfig.Opening.entries
+        openingChips = Chips(this, openings.map { it.label }, openings.indexOf(MotionConfig.opening(this))) { i ->
+            MotionConfig.setOpening(this, openings[i]); describe(); showRim(); stage.play(open = true)
+        }
+        screen.add(openingChips)
+        openingDetail = text("", 13.5f, Kit.MUTED).apply { tag = SECONDARY; setPadding(px(4), px(10), 0, 0) }
+        screen.add(openingDetail)
+        screen.add(tuningCard(open = true), px(14))
+
+        // ---- Closing
+        screen.section("Closing")
+        val closings = MotionConfig.Closing.entries
+        closingChips = Chips(this, closings.map { it.label }, closings.indexOf(MotionConfig.closing(this))) { i ->
+            MotionConfig.setClosing(this, closings[i]); describe(); showRim(); stage.play(open = false)
+        }
+        screen.add(closingChips)
+        closingDetail = text("", 13.5f, Kit.MUTED).apply { tag = SECONDARY; setPadding(px(4), px(10), 0, 0) }
+        screen.add(closingDetail)
+        screen.add(tuningCard(open = false), px(14))
+
+        // Membrana's rim colour: only there when Membrana opens or closes (principle 3)
         rimBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         rimBlock.addView(text("Rim light", 14f, Kit.MUTED, 450).apply { setPadding(px(4), 0, 0, px(8)) })
         val rims = MotionConfig.Rim.entries
@@ -87,7 +115,7 @@ class MainActivity : Activity(), SensorEventListener {
             MotionConfig.setRim(this, rims[i]); stage.play(open = true)
         }, LinearLayout.LayoutParams(-1, -2))
         screen.add(rimBlock, px(18))
-        showRim(MotionConfig.style(this) == MotionConfig.Style.MEMBRANA, animate = false)
+        describe(); showRim(animate = false)
 
         screen.add(Card(this).apply {
             row(Row(this@MainActivity, "Concentrato", "The faster you fold, the emptier the transition: only the movement stays",
@@ -135,11 +163,38 @@ class MainActivity : Activity(), SensorEventListener {
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
     }
 
-    /** The rim colour materialises under the selector when it applies, and folds away when not. */
-    private fun showRim(on: Boolean, animate: Boolean = true) {
-        if (!animate) { rimBlock.visibility = if (on) View.VISIBLE else View.GONE; return }
-        android.transition.TransitionManager.beginDelayedTransition(screen.column)
-        rimBlock.visibility = if (on) View.VISIBLE else View.GONE
+    /** The rim colour materialises under the choices when Membrana is used, and folds away when not. */
+    private fun showRim(animate: Boolean = true) {
+        val on = MotionConfig.opening(this) == MotionConfig.Opening.MEMBRANA || MotionConfig.closing(this) == MotionConfig.Closing.MEMBRANA
+        val v = if (on) View.VISIBLE else View.GONE
+        if (rimBlock.visibility == v) return
+        if (animate) android.transition.TransitionManager.beginDelayedTransition(screen.column)
+        rimBlock.visibility = v
+    }
+
+    /** Keeps the lines under each choice true, and the preset row honest: a mix shows as Custom. */
+    private fun describe() {
+        val match = MotionConfig.matchingStyle(this)
+        presets.select(MotionConfig.Style.entries.indexOf(match))
+        presetDetail.text = match?.detail ?: "Custom: your own opening and closing. Pick a preset to match them again."
+        openingDetail.text = MotionConfig.opening(this).detail
+        closingDetail.text = MotionConfig.closing(this).detail
+    }
+
+    /** Brightness of the light and speed of the movement, for one direction. The centre tick is as designed. */
+    private fun tuningCard(open: Boolean): View = Card(this).apply {
+        val bKey = if (open) "open_brightness" else "close_brightness"
+        val sKey = if (open) "open_speed" else "close_speed"
+        val pct = { v: Float -> if (kotlin.math.abs(v - 1f) < 0.01f) "As designed" else "${(v * 100).toInt()}%" }
+        addView(Slider(this@MainActivity, "Brightness", MotionConfig.BRIGHTNESS_MIN, MotionConfig.BRIGHTNESS_MAX,
+            if (open) MotionConfig.openBrightness(this@MainActivity) else MotionConfig.closeBrightness(this@MainActivity), format = pct) {
+            MotionConfig.setTuning(this@MainActivity, bKey, it); stage.play(open)
+        })
+        addView(Slider(this@MainActivity, "Speed", MotionConfig.SPEED_MIN, MotionConfig.SPEED_MAX,
+            if (open) MotionConfig.openSpeed(this@MainActivity) else MotionConfig.closeSpeed(this@MainActivity),
+            format = { v -> if (kotlin.math.abs(v - 1f) < 0.01f) "As designed" else "%.2fx".format(v) }) {
+            MotionConfig.setTuning(this@MainActivity, sKey, it); stage.play(open)
+        })
     }
 
     override fun onResume() {
@@ -201,7 +256,9 @@ class MainActivity : Activity(), SensorEventListener {
             }.getOrDefault(1f)
             appendLine(if (scale <= 0f) "Animator duration scale: off, so the transition is skipped" else "Animator duration scale: ${scale}x")
             appendLine("Animates at up to ${display?.supportedModes?.maxOfOrNull { it.refreshRate }?.toInt() ?: "?"}Hz")
-            appendLine("Style: ${MotionConfig.style(this@MainActivity).label}, rim ${MotionConfig.RIM.label.lowercase()}, Concentrato ${if (MotionConfig.concentrato(this@MainActivity)) "on" else "off"}")
+            appendLine("Opening: ${MotionConfig.opening(this@MainActivity).label} (light ${(MotionConfig.openBrightness(this@MainActivity) * 100).toInt()}%, speed ${MotionConfig.openSpeed(this@MainActivity)}x)")
+            appendLine("Closing: ${MotionConfig.closing(this@MainActivity).label} (light ${(MotionConfig.closeBrightness(this@MainActivity) * 100).toInt()}%, speed ${MotionConfig.closeSpeed(this@MainActivity)}x)")
+            appendLine("Rim ${MotionConfig.RIM.label.lowercase()}, Concentrato ${if (MotionConfig.concentrato(this@MainActivity)) "on" else "off"}")
             appendLine("Starts after a restart: " + if (AutoStart.isEnabled(this@MainActivity)) "on" else "off")
             appendLine("Service last started: ${Status.describe(this@MainActivity, Status.STARTED)}")
             appendLine("Effect last played: ${Status.describe(this@MainActivity, Status.PLAYED)}")
@@ -225,6 +282,9 @@ class MainActivity : Activity(), SensorEventListener {
             "Visconti" to "A lacquer arch closes in on the crease and the last point of light dips into the hinge. Opening, dark glass with Visconti light inside it parts into a lit bezel that seats with a click and slides away.",
             "Giulietta" to "The same glass opening, woken by the Giulietta's rear lamps: the right ring sweeps round where your fingers left the cover, its bar runs in to the crease, the light crosses, and the left ring closes as the halves let go.",
             "Fanale" to "Alfa Romeo alone. Opening is unlocking the car: both lamps light in sequence, bloom once with the click, and the halves carry them off the edges, their lips casting red light on the screen. Closing is locking it: the lamps go out like an indicator and the last light dips into the hinge.",
+            "Fanale reversed" to "The Fanale closing run backwards as an opening. The last point of light rises out of the hinge, the lamps come back on like an indicator in reverse, and the halves part with them lit. It is the lock played as an unlock, so a Fanale closing and this opening read as one continuous gesture.",
+            "Your own pairing" to "Presets match an opening to its closing. Choose them separately and the preset row reads Custom; nothing is lost, and tapping a preset matches them again.",
+            "Brightness and speed" to "Each direction has its own. Brightness runs from 60% to 160% of the designed light and lifts the glow, not only the colour. Speed runs from 0.7x to 1.4x. The closing still finishes before One UI switches, because its build is planned against your fold; a slower closing simply starts earlier. The tick under each slider is the designed value, and releasing near it settles there.",
             "Membrana" to "The doctrine's own transition. No lamps and no lacquer: one membrane and one line of light on each moving edge, brightest at its middle and falling off towards its anchors. The rim takes champagne, rosso or Visconti.",
             "One climax" to "Every style keeps one moment: the seated bezel, the lights coming on, the membrane snapping taut. The haptic click sits on it, and touch comes back the moment your screen is whole.",
         )
@@ -308,10 +368,13 @@ class Stage(ctx: Context) : FrameLayout(ctx) {
         MotionConfig.apply(context)
         overlay.mode = if (open) FoldOverlayView.Mode.OPEN else FoldOverlayView.Mode.CLOSE
         overlay.density = if (fast && MotionConfig.concentrato(context)) MotionConfig.DENSITY_FLOOR else 1f
+        overlay.brightness = if (open) MotionConfig.openBrightness(context) else MotionConfig.closeBrightness(context)
         overlay.setContentSize(width, height)
-        val build = 600f; val finale = MotionConfig.FINALE_MS.toFloat()
+        // Speed as the service applies it: the whole run shortens or stretches
+        val speed = if (open) MotionConfig.openSpeed(context) else MotionConfig.closeSpeed(context)
+        val build = 600f / speed; val finale = MotionConfig.FINALE_MS / speed
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = if (open) MotionConfig.REVEAL_MS else (build + finale).toLong()
+            duration = if (open) (MotionConfig.REVEAL_MS / speed).toLong() else (build + finale).toLong()
             interpolator = null
             addUpdateListener {
                 val k = it.animatedFraction
