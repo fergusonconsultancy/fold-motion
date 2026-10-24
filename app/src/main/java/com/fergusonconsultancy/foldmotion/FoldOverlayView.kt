@@ -403,7 +403,7 @@ class FoldOverlayView(context: Context) : View(context) {
             MotionConfig.Effect.SIGNATURE -> drawSignature(canvas, w, h)
             MotionConfig.Effect.FRAME_OF_LIGHT -> drawFrameOfLight(canvas, w, h)
             MotionConfig.Effect.LIT_GLASS -> drawLitGlass(canvas, w, h)
-            MotionConfig.Effect.LAMP_GLASS -> drawLitGlass(canvas, w, h, lamp = true)
+            MotionConfig.Effect.LAMP_GLASS -> if (mode == Mode.CLOSE) drawGiuliettaClose(canvas, w, h) else drawLitGlass(canvas, w, h, lamp = true)
             MotionConfig.Effect.FANALE -> {
                 // Lamps are laid out in screen coordinates, so undo the mirror
                 val c = canvas.save()
@@ -412,10 +412,9 @@ class FoldOverlayView(context: Context) : View(context) {
                 canvas.restoreToCount(c)
             }
             MotionConfig.Effect.FANALE_REVERSE -> {
-                // The Fanale closing, played backwards: the reveal runs p from 1 down to 0
                 val c = canvas.save()
                 if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
-                drawFanaleClose(canvas, w, h)
+                drawFanaleReverse(canvas, w, h)
                 canvas.restoreToCount(c)
             }
             MotionConfig.Effect.CIRCUITO -> {
@@ -1407,6 +1406,114 @@ class FoldOverlayView(context: Context) : View(context) {
     }
 
     /**
+     * Fanale reversed, rebuilt (25 Oct 2026). It used to be the closing run backwards, which lit
+     * the rings while the halves were already carrying them away, so the rings never had their
+     * moment. Now: a point of light rises out of the hinge, splits in two and runs out along
+     * both bars, then each head sweeps the full circle of its ring, a bright comet with a tail,
+     * the two lamps in step. The rings close, the lamps bloom (the click), and only then do the
+     * halves part, carrying the lit lamps away.
+     */
+    private fun drawFanaleReverse(canvas: Canvas, w: Float, h: Float) {
+        val t = FoldMath.unglide(1f - p)
+        val cx = w / 2f
+        val l = rosso
+        l.layout(w, h)
+        val bar0 = 0.07f; val bar1 = 0.19f; val ring1 = 0.38f
+        for (side in 0..1) l.scheduleIgnite(side, t, bar1, ring1, bar0, bar1, barFromTip = true)
+        val bt = MotionConfig.FANALE_REVERSE_CLICK_T
+        val bloom = FoldMath.smooth(FoldMath.clamp((t - (bt - 0.03f)) / 0.035f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - bt - 0.03f) / 0.16f)))
+        if (bloom > 0f) l.scale(1f + 0.3f * bloom * density)
+
+        val part = FoldMath.magnetOut(FoldMath.clamp((t - 0.47f) / 0.38f))
+        val xr = cx + (w - cx) * part
+        val xl = cx - cx * part
+        fanaleHalves(canvas, l, w, h, xl, xr, part, part, 1f)
+
+        if (xr - xl < 2f) {
+            // The point rising out of the hinge and splitting towards the two bar tips
+            val y0 = l.barLine
+            val rise = FoldMath.smooth(FoldMath.clamp(t / 0.05f))
+            val split = FoldMath.smooth(FoldMath.clamp((t - 0.04f) / (bar0 - 0.04f + 0.01f)))
+            val gone = 1f - FoldMath.smooth(FoldMath.clamp((t - bar0) / 0.03f))
+            if (gone > 0.004f) {
+                val gy = y0 + h * 0.03f * (1f - rise)
+                for (side in 0..1) {
+                    val tip = l.tipX(side, 0f)
+                    val x = cx + (tip - cx) * split
+                    l.glow(canvas, x, gy, w * 0.03f, w * 0.03f, 0.55f * rise * gone)
+                    l.coreDot(canvas, x, gy, l.ringRadius * 0.08f, 0.95f * rise * gone)
+                }
+            }
+        }
+        // Lights on: each ring breathes out onto the bodywork
+        if (bloom > 0.004f && xr - xl < w * 0.3f) {
+            for (side in 0..1) {
+                val off = if (side == 0) xl - cx else xr - cx
+                val x = (if (side == 0) w * 0.15f else w * 0.85f) + off
+                l.glow(canvas, x, h * 0.5f, l.ringRadius * 2.5f, l.ringRadius * 2.5f, 0.26f * bloom)
+            }
+        }
+    }
+
+    /**
+     * Giulietta, closing (25 Oct 2026): the Giulietta opening's materials, closing. Two halves of
+     * dark Visconti glass slide in from the edges together, their rear lamps lit and a line of
+     * green light on each lip. They meet on the crease (the click) with a breath of light along
+     * the seam; then the lamps go out like an indicator and the last light dips into the hinge.
+     */
+    private fun drawGiuliettaClose(canvas: Canvas, w: Float, h: Float) {
+        val cx = w / 2f
+        val e = FoldMath.clamp(p / MotionConfig.BUILD_END)
+        val sl = cx * e
+        val sr = w - (w - cx) * e
+        val shut = sr - sl <= 1f
+        val l = if (MotionConfig.LAMP_GLASS_ROSSO) rosso else visconti
+        l.layout(w, h)
+        l.scheduleOut(0, p, 0.58f, 0.7f, 0.72f, 0.84f)
+        l.scheduleOut(1, p, 0.58f, 0.7f, 0.72f, 0.84f)
+        // The glass (this canvas is mirrored: screen x is w - x here)
+        val c0 = canvas.save()
+        if (!shut) {
+            framePath.reset()
+            framePath.addRect(w - sl, 0f, w + 1f, h, Path.Direction.CW)
+            framePath.addRect(0f, 0f, w - sr, h, Path.Direction.CW)
+            canvas.clipPath(framePath)
+        }
+        glassMaterial(canvas, w, h, 1f, w * 1.6f, front = false)
+        canvas.restoreToCount(c0)
+        // The lips: a line of light on each leading edge, gone at contact
+        val lip = FoldMath.smooth(FoldMath.clamp(e / 0.15f)) * (1f - FoldMath.smooth(FoldMath.clamp((e - 0.9f) / 0.1f)))
+        if (!shut && lip > 0.004f) {
+            greenBand(canvas, w - sl, 0f, h, w * 0.02f, 0.35f * lip * density, w - sl - w * 0.05f, w - sl)
+            greenBand(canvas, w - sr, 0f, h, w * 0.02f, 0.35f * lip * density, w - sr, w - sr + w * 0.05f)
+            linePaint.color = Color.rgb(226, 255, 232)
+            linePaint.alpha = (255 * 0.85f * lip).toInt()
+            canvas.drawRect(w - sl - 0.75f, 0f, w - sl + 0.75f, h, linePaint)
+            canvas.drawRect(w - sr - 0.75f, 0f, w - sr + 0.75f, h, linePaint)
+            linePaint.color = Color.rgb(233, 223, 200)
+        }
+        // Contact: a breath of light along the seam
+        val seam = FoldMath.smooth(FoldMath.clamp((p - MotionConfig.BUILD_END) / 0.02f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - MotionConfig.BUILD_END - 0.03f) / 0.1f)))
+        if (seam > 0.004f) greenBand(canvas, cx, 0f, h, w * 0.04f, 0.3f * seam, 0f, w + 1f)
+        // The lamps ride their halves
+        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.86f) / 0.1f))
+        drawGlassLamps(canvas, l, w, if (shut) cx else sl, if (shut) cx else sr)
+        // The glass goes dark with the lamps
+        if (p > 0.84f) { blackPaint.alpha = (255 * (1f - fade)).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint); blackPaint.alpha = 255 }
+        // The last light dips into the hinge
+        val glint = FoldMath.smooth(FoldMath.clamp((p - 0.82f) / 0.04f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.88f) / 0.1f)))
+        if (glint > 0.004f) {
+            val c = canvas.save()
+            if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+            val wd = FoldMath.clamp((p - 0.84f) / 0.14f)
+            val gy = l.barLine + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
+            l.glow(canvas, cx, gy, w * 0.045f, w * 0.045f, 0.55f * glint)
+            l.coreDot(canvas, cx, gy, l.ringRadius * 0.08f, 0.9f * glint)
+            canvas.restoreToCount(c)
+        }
+    }
+
+    /**
      * Circuito, opening (24 Oct 2026, from Mechack's brief). Black, both lamps at ember. Both
      * light at once at their outer edge and the light runs round each ring both ways, over the
      * top and under the bottom, the heads meeting where the bar leaves the ring. Then down each
@@ -1654,8 +1761,10 @@ class FoldOverlayView(context: Context) : View(context) {
         val t = FoldMath.unglide(1f - p)
         val cx = w / 2f
         val over = w * 0.03f
-        val aR = FoldMath.magnetOut(FoldMath.clamp((t - 0.14f) / 0.5f))
-        val aL = FoldMath.magnetOut(FoldMath.clamp((t - 0.2f) / 0.48f))
+        // 25 Oct 2026: both edges part together and bow alike. The right edge used to lead and
+        // the left lag, so the opening drifted to one side of the crease and read as off-centre.
+        val aR = FoldMath.magnetOut(FoldMath.clamp((t - 0.16f) / 0.5f))
+        val aL = aR
         val xr = cx + (w - cx + over) * aR
         val xl = cx - (cx + over) * aL
         // The middle leads, then relaxes with a soft overshoot as the membrane goes taut
@@ -1666,8 +1775,8 @@ class FoldOverlayView(context: Context) : View(context) {
             val snap = -0.07f * kotlin.math.sin(Math.PI.toFloat() * FoldMath.clamp((u - 0.7f) / 0.3f))
             return w * 0.16f * (lead + snap)
         }
-        val br = bow(0.08f)
-        val bl = -bow(0.14f)
+        val br = bow(0.1f)
+        val bl = -br
         val lens = 0.2f * density * FoldMath.smooth(FoldMath.clamp(t / 0.12f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.12f) / 0.1f)))
         val rim = FoldMath.smooth(FoldMath.clamp((t - 0.1f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - 0.62f) / 0.16f)))
         membrane(canvas, w, h, xl, bl, xr, br, rim, lens)
