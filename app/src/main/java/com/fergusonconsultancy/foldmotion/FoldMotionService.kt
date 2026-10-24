@@ -691,7 +691,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 // Haptics timed to the light: tick as the blades start, click on the pulse
                 if (!tickDone && p >= MotionConfig.TICK_AT) { tickDone = true; haptics.tick() }
                 val clickP = when (MotionConfig.CLOSING_EFFECT) {
-                    MotionConfig.Effect.FANALE, MotionConfig.Effect.CIRCUITO -> MotionConfig.FANALE_CONTACT_P
+                    MotionConfig.Effect.FANALE, MotionConfig.Effect.CIRCUITO, MotionConfig.Effect.LAMP_GLASS -> MotionConfig.FANALE_CONTACT_P
                     MotionConfig.Effect.MEMBRANA -> MotionConfig.MEMBRANA_CONTACT_P
                     else -> MotionConfig.CLICK_AT
                 }

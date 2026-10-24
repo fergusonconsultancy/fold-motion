@@ -36,8 +36,7 @@ object MotionConfig {
      * opening; [apply] sets them before every run.
      */
     enum class Style(val label: String, val detail: String, val closing: Effect, val opening: Effect) {
-        VISCONTI("Visconti", "Lacquer arch closing, lit glass opening", Effect.ARCH_APERTURE, Effect.LIT_GLASS),
-        GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.ARCH_APERTURE, Effect.LAMP_GLASS),
+        GIULIETTA("Giulietta", "Dark Visconti glass and the Giulietta's rear lamps, opening and closing", Effect.LAMP_GLASS, Effect.LAMP_GLASS),
         FANALE("Fanale", "Alfa Romeo only: the lamps light, part and lock", Effect.FANALE, Effect.FANALE),
         MEMBRANA("Membrana", "One living membrane parts on curves and snaps taut", Effect.MEMBRANA, Effect.MEMBRANA),
         CIRCUITO("Circuito", "Both lamps run their circuit in step and meet on the crease", Effect.CIRCUITO, Effect.CIRCUITO),
@@ -77,7 +76,7 @@ object MotionConfig {
 
     fun style(context: android.content.Context): Style = runCatching {
         Style.valueOf(context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(STYLE_KEY, null)!!)
-    }.getOrDefault(Style.VISCONTI)
+    }.getOrDefault(Style.GIULIETTA)
 
     /** A preset: sets the opening and the closing together. */
     fun setStyle(context: android.content.Context, s: Style) {
@@ -89,17 +88,16 @@ object MotionConfig {
 
     /** The openings offered in the app. */
     enum class Opening(val label: String, val detail: String, val effect: Effect) {
-        LIT_GLASS("Lit glass", "Dark glass with Visconti light inside it parts into a lit bezel", Effect.LIT_GLASS),
         GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.LAMP_GLASS),
         FANALE("Fanale", "The lamps light in sequence, bloom, and the halves part", Effect.FANALE),
         CIRCUITO("Circuito", "Both lamps light at their outer edge at once, run round the ring and along the bar, and meet on the crease", Effect.CIRCUITO),
-        FANALE_REVERSE("Fanale reversed", "The Fanale closing played backwards: a point of light rises from the hinge and the lamps come on as the halves part", Effect.FANALE_REVERSE),
+        FANALE_REVERSE("Fanale reversed", "A point of light rises from the hinge, splits, runs out along both bars and sweeps the full circle of each ring; the lamps bloom and the halves part", Effect.FANALE_REVERSE),
         MEMBRANA("Membrana", "One membrane parts on curves and snaps taut", Effect.MEMBRANA),
     }
 
     /** The closings offered in the app. */
     enum class Closing(val label: String, val detail: String, val effect: Effect) {
-        ARCH("Lacquer arch", "A lacquer arch closes in on the crease; the last light dips into the hinge", Effect.ARCH_APERTURE),
+        GIULIETTA("Giulietta", "The glass halves slide in with their lamps lit and green light on their lips, meet on the crease, and the lamps go out like an indicator", Effect.LAMP_GLASS),
         FANALE("Fanale", "Locking the car: the lit halves meet and the lamps go out like an indicator", Effect.FANALE),
         CIRCUITO("Circuito", "The lit halves meet in step; the light drains round each ring and along the bars to one last point on the crease", Effect.CIRCUITO),
         MEMBRANA("Membrana", "The membrane is drawn in to a lens that seals into a last point of light", Effect.MEMBRANA),
@@ -111,11 +109,11 @@ object MotionConfig {
 
     fun opening(c: android.content.Context): Opening =
         Opening.entries.firstOrNull { it.effect.name == prefs(c).getString(OPENING_KEY, null) }
-            ?: Opening.entries.first { it.effect == style(c).opening }
+            ?: Opening.entries.firstOrNull { it.effect == style(c).opening } ?: Opening.GIULIETTA
 
     fun closing(c: android.content.Context): Closing =
         Closing.entries.firstOrNull { it.effect.name == prefs(c).getString(CLOSING_KEY, null) }
-            ?: Closing.entries.first { it.effect == style(c).closing }
+            ?: Closing.entries.firstOrNull { it.effect == style(c).closing } ?: Closing.GIULIETTA
 
     fun setOpening(c: android.content.Context, o: Opening) { prefs(c).edit().putString(OPENING_KEY, o.effect.name).apply(); apply(c) }
     fun setClosing(c: android.content.Context, k: Closing) { prefs(c).edit().putString(CLOSING_KEY, k.effect.name).apply(); apply(c) }
@@ -146,11 +144,11 @@ object MotionConfig {
     }
 
     /** Closing effect; set from the chosen style. Arch Aperture since 16 Oct 2026 (night). */
-    var CLOSING_EFFECT = Effect.ARCH_APERTURE
+    var CLOSING_EFFECT = Effect.LAMP_GLASS
         private set
 
     /** Opening effect; set from the chosen style. Lit Glass since 22 Oct 2026. */
-    var OPENING_EFFECT = Effect.LIT_GLASS
+    var OPENING_EFFECT = Effect.LAMP_GLASS
         private set
 
     /** Giulietta: the lamps in Alfa red inside the dark Visconti glass (false: Visconti light). */
@@ -184,8 +182,8 @@ object MotionConfig {
     const val CIRCUITO_PART_T = 0.44f
     const val CIRCUITO_TOUCH_T = 0.78f
 
-    const val FANALE_REVERSE_CLICK_T = 0.48f
-    const val FANALE_REVERSE_TOUCH_T = 0.75f
+    const val FANALE_REVERSE_CLICK_T = 0.42f
+    const val FANALE_REVERSE_TOUCH_T = 0.8f
 
     /**
      * Concentrato's speed scale. Opening: the time from the hinge passing 90 degrees to One UI
