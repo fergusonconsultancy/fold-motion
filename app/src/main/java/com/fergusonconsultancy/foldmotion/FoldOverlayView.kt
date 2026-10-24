@@ -418,6 +418,12 @@ class FoldOverlayView(context: Context) : View(context) {
                 drawFanaleClose(canvas, w, h)
                 canvas.restoreToCount(c)
             }
+            MotionConfig.Effect.CIRCUITO -> {
+                val c = canvas.save()
+                if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+                if (mode == Mode.CLOSE) drawCircuitoClose(canvas, w, h) else drawCircuitoOpen(canvas, w, h)
+                canvas.restoreToCount(c)
+            }
             MotionConfig.Effect.MEMBRANA -> {
                 val c = canvas.save()
                 if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
@@ -1397,6 +1403,102 @@ class FoldOverlayView(context: Context) : View(context) {
             val gy = h * 0.5f - l.ringRadius * 0.18f + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
             l.glow(canvas, cx, gy, w * 0.045f, w * 0.045f, 0.55f * glint)
             l.coreDot(canvas, cx, gy, l.ringRadius * 0.08f, 0.9f * glint)
+        }
+    }
+
+    /**
+     * Circuito, opening (24 Oct 2026, from Mechack's brief). Black, both lamps at ember. Both
+     * light at once at their outer edge and the light runs round each ring both ways, over the
+     * top and under the bottom, the heads meeting where the bar leaves the ring. Then down each
+     * bar towards the crease, the two lamps exact mirror images, and across the last gap until
+     * the two lights meet on the crease: one point, the bloom, the click. Then the halves part
+     * together, carrying their lit lamps away.
+     */
+    private fun drawCircuitoOpen(canvas: Canvas, w: Float, h: Float) {
+        val t = FoldMath.unglide(1f - p)
+        val cx = w / 2f
+        val l = rosso
+        l.layout(w, h)
+        val ring1 = 0.17f; val bar1 = 0.31f; val meet = MotionConfig.CIRCUITO_MEET_T
+        for (side in 0..1) l.scheduleCircuit(side, t, 0.02f, ring1, ring1 + 0.01f, bar1)
+        val bloom = FoldMath.smooth(FoldMath.clamp((t - (meet - 0.02f)) / 0.035f)) * (1f - FoldMath.smooth(FoldMath.clamp((t - meet - 0.03f) / 0.16f)))
+        if (bloom > 0f) l.scale(1f + 0.28f * bloom * density)
+
+        val part = FoldMath.magnetOut(FoldMath.clamp((t - MotionConfig.CIRCUITO_PART_T) / 0.4f))
+        val xr = cx + (w - cx) * part
+        val xl = cx - cx * part
+        fanaleHalves(canvas, l, w, h, xl, xr, part, part, 1f)
+
+        // The last stretch: from each bar's tip a point of light runs to the crease, and they meet
+        if (xr - xl < 2f) circuitoMeet(canvas, l, w, h, t, bar1, meet, bloom, closing = false)
+        // Lights on: the rings breathe out onto the bodywork
+        if (bloom > 0.004f && xr - xl < w * 0.3f) {
+            for (side in 0..1) {
+                val off = if (side == 0) xl - cx else xr - cx
+                val x = (if (side == 0) w * 0.15f else w * 0.85f) + off
+                l.glow(canvas, x, h * 0.5f, l.ringRadius * 2.4f, l.ringRadius * 2.4f, 0.24f * bloom)
+            }
+        }
+    }
+
+    /**
+     * Circuito, closing: the lit halves come in together and meet on the crease (the click). Then
+     * the light drains the same way it came: dark from each lamp's outer edge, round both sides of
+     * the ring, down the bars, until the two last points run in from the tips and meet on the
+     * crease, dip into the hinge and go out.
+     */
+    private fun drawCircuitoClose(canvas: Canvas, w: Float, h: Float) {
+        val cx = w / 2f
+        val l = rosso
+        l.layout(w, h)
+        val e = FoldMath.clamp(p / MotionConfig.BUILD_END)
+        val xl = cx * e
+        val xr = w - (w - cx) * e
+        for (side in 0..1) l.scheduleCircuit(side, p, 0.3f, 0.5f, 0.52f, 0.72f, out = true)
+        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.84f) / 0.12f))
+        fanaleHalves(canvas, l, w, h, xl, xr, 1f - e, 1f - e, fade)
+        if (xr - xl < 2f) circuitoMeet(canvas, l, w, h, p, 0.72f, 0.8f, 0f, closing = true)
+    }
+
+    /**
+     * The two points of light crossing from the bar tips to the crease between [from] and [at],
+     * meeting there; opening, the meeting holds as the bloom; closing, it dips into the hinge.
+     */
+    private fun circuitoMeet(canvas: Canvas, l: Lamps, w: Float, h: Float, t: Float, from: Float, at: Float, bloom: Float, closing: Boolean) {
+        val cx = w / 2f
+        val y0 = l.barLine
+        val run = FoldMath.clamp((t - from) / (at - from))
+        if (t < from) return
+        val core = l.ringRadius * 0.08f
+        if (run < 1f) {
+            val k = FoldMath.smooth(run)
+            for (side in 0..1) {
+                val tip = l.tipX(side, 0f)
+                val x = tip + (cx - tip) * k
+                l.glow(canvas, x, y0, w * 0.022f, w * 0.022f, 0.5f)
+                l.coreDot(canvas, x, y0, core, 0.95f)
+            }
+            return
+        }
+        // Met: one point on the crease
+        val after = t - at
+        if (!closing) {
+            val a = 1f - FoldMath.smooth(FoldMath.clamp((after - 0.02f) / 0.12f))
+            val flash = maxOf(a, bloom)
+            l.glow(canvas, cx, y0, w * 0.05f, w * 0.05f, 0.6f * flash)
+            l.coreDot(canvas, cx, y0, core * 1.3f, 0.95f * a)
+            // The seam: for a breath, the meeting runs the height of the crease
+            val seam = FoldMath.smooth(FoldMath.clamp(after / 0.015f)) * (1f - FoldMath.smooth(FoldMath.clamp((after - 0.02f) / 0.06f)))
+            if (seam > 0.004f) {
+                l.glow(canvas, cx, h * 0.5f, w * 0.03f, h * 0.55f, 0.3f * seam)
+                l.line(canvas, cx, 0f, h, max(1.2f, w * 0.0012f), 0.6f * seam)
+            }
+        } else {
+            val g = 1f - FoldMath.smooth(FoldMath.clamp((after - 0.04f) / 0.12f))
+            val wd = FoldMath.clamp(after / 0.16f)
+            val gy = y0 + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
+            l.glow(canvas, cx, gy, w * 0.045f, w * 0.045f, 0.55f * g)
+            l.coreDot(canvas, cx, gy, core, 0.9f * g)
         }
     }
 

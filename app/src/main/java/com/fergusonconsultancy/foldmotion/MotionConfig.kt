@@ -29,7 +29,7 @@ package com.fergusonconsultancy.foldmotion
  * no official colour value was available.
  */
 object MotionConfig {
-    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS, LAMP_GLASS, FANALE, MEMBRANA, FANALE_REVERSE }
+    enum class Effect { ONE_PLANE, CREASE_SPLIT, RULED_SURFACE, NAVE_OF_LIGHT, LACQUER_PANEL, ARCH_APERTURE, HINGE_SHADE, SIGNATURE, FRAME_OF_LIGHT, LIT_GLASS, LAMP_GLASS, FANALE, MEMBRANA, FANALE_REVERSE, CIRCUITO }
 
     /**
      * The pairings Mechack chooses between in the app (23 Oct 2026). Each names its closing and
@@ -40,6 +40,7 @@ object MotionConfig {
         GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.ARCH_APERTURE, Effect.LAMP_GLASS),
         FANALE("Fanale", "Alfa Romeo only: the lamps light, part and lock", Effect.FANALE, Effect.FANALE),
         MEMBRANA("Membrana", "One living membrane parts on curves and snaps taut", Effect.MEMBRANA, Effect.MEMBRANA),
+        CIRCUITO("Circuito", "Both lamps run their circuit in step and meet on the crease", Effect.CIRCUITO, Effect.CIRCUITO),
     }
 
     /** The colour of Membrana's rim light: glow and core. */
@@ -91,6 +92,7 @@ object MotionConfig {
         LIT_GLASS("Lit glass", "Dark glass with Visconti light inside it parts into a lit bezel", Effect.LIT_GLASS),
         GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.LAMP_GLASS),
         FANALE("Fanale", "The lamps light in sequence, bloom, and the halves part", Effect.FANALE),
+        CIRCUITO("Circuito", "Both lamps light at their outer edge at once, run round the ring and along the bar, and meet on the crease", Effect.CIRCUITO),
         FANALE_REVERSE("Fanale reversed", "The Fanale closing played backwards: a point of light rises from the hinge and the lamps come on as the halves part", Effect.FANALE_REVERSE),
         MEMBRANA("Membrana", "One membrane parts on curves and snaps taut", Effect.MEMBRANA),
     }
@@ -99,6 +101,7 @@ object MotionConfig {
     enum class Closing(val label: String, val detail: String, val effect: Effect) {
         ARCH("Lacquer arch", "A lacquer arch closes in on the crease; the last light dips into the hinge", Effect.ARCH_APERTURE),
         FANALE("Fanale", "Locking the car: the lit halves meet and the lamps go out like an indicator", Effect.FANALE),
+        CIRCUITO("Circuito", "The lit halves meet in step; the light drains round each ring and along the bars to one last point on the crease", Effect.CIRCUITO),
         MEMBRANA("Membrana", "The membrane is drawn in to a lens that seals into a last point of light", Effect.MEMBRANA),
     }
 
@@ -173,6 +176,14 @@ object MotionConfig {
      * Fanale reversed, as shares of the reveal's time: the closing's contact (p = 0.545) comes at
      * about 0.48 of the reveal (the click), and touch returns at 0.75, the halves nearly gone.
      */
+    /**
+     * Circuito (24 Oct 2026), as shares of the reveal's time: the two lights meet on the crease
+     * at MEET_T (the haptic click, the bloom); the halves part from PART_T; touch returns at TOUCH_T.
+     */
+    const val CIRCUITO_MEET_T = 0.37f
+    const val CIRCUITO_PART_T = 0.44f
+    const val CIRCUITO_TOUCH_T = 0.78f
+
     const val FANALE_REVERSE_CLICK_T = 0.48f
     const val FANALE_REVERSE_TOUCH_T = 0.75f
 
