@@ -97,9 +97,9 @@ object MotionConfig {
 
     /** The closings offered in the app. */
     enum class Closing(val label: String, val detail: String, val effect: Effect) {
-        GIULIETTA("Giulietta", "The glass halves slide in with their lamps lit and green light on their lips, meet on the crease, and the lamps go out like an indicator", Effect.LAMP_GLASS),
-        FANALE("Fanale", "Locking the car: the lit halves meet and the lamps go out like an indicator", Effect.FANALE),
-        CIRCUITO("Circuito", "The lit halves meet in step; the light drains round each ring and along the bars to one last point on the crease", Effect.CIRCUITO),
+        GIULIETTA("Giulietta", "The glass halves sweep in; the lamps light round their rings and down their bars, meet in the centre as the glass closes, and leave a thin strip of light", Effect.LAMP_GLASS),
+        FANALE("Fanale", "The halves sweep in; each ring is swept by a head of light that runs down its bar, and the two meet in the centre as a thin strip of light", Effect.FANALE),
+        CIRCUITO("Circuito", "The halves sweep in; each ring lights from its outer edge both ways, the light runs down the bars and meets in the centre as a thin strip of light", Effect.CIRCUITO),
         MEMBRANA("Membrana", "The membrane is drawn in to a lens that seals into a last point of light", Effect.MEMBRANA),
     }
 

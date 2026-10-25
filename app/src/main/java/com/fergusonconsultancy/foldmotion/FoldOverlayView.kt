@@ -1374,36 +1374,90 @@ class FoldOverlayView(context: Context) : View(context) {
     }
 
     /**
-     * Closing: locking the car. The dark halves slide in from the edges with their lamps lit, the
-     * left a beat ahead (the fold travels left to right), and meet on the crease with the soft
-     * close (haptic click at contact). Then the lamps go out as an indicator does: each ring
-     * round from its far side, then its bar in towards the crease, the left lamp first. The two
-     * tips meet as the last point of light on the crease, which dips into the hinge and goes out.
+     * Closing: see drawLampsClose, the shared closing flourish.
      */
-    private fun drawFanaleClose(canvas: Canvas, w: Float, h: Float) {
+    private fun drawFanaleClose(canvas: Canvas, w: Float, h: Float) = drawLampsClose(canvas, w, h, circuit = false)
+
+    /**
+     * The closing flourish (25 Oct 2026, from Mechack's brief), shared by Fanale and Circuito.
+     * The dark halves sweep in quickly and almost meet, leaving a narrow strip of your screen
+     * between them, so the lamps are on screen for their moment. Then the light runs the other
+     * way to Fanale reversed: round the rings first, a bright head with a tail, then down the
+     * bars towards the crease, and the last two points cross the gap and meet in the centre at
+     * the instant the halves close (the click). What remains is one thin strip of light on the
+     * crease, which draws itself in to a point, dips into the hinge and goes out.
+     * Fanale: each ring is swept by one head from where its bar leaves it, the two lamps in step.
+     * Circuito: each ring lights from its outer edge both ways at once, the heads meeting at the bar.
+     */
+    private fun drawLampsClose(canvas: Canvas, w: Float, h: Float, circuit: Boolean) {
         val cx = w / 2f
         val l = rosso
         l.layout(w, h)
-        // The halves meet exactly at the closing plan's contact (BUILD_END); the left leads
-        val eL = FoldMath.clamp(p / MotionConfig.BUILD_END)
-        val eR = FoldMath.clamp((p - 0.025f) / (MotionConfig.BUILD_END - 0.025f))
-        val xl = cx * eL
-        val xr = w - (w - cx) * eR
-        // The rings go out as the halves arrive, the bars across the contact (the finale is only 300ms)
-        l.scheduleOut(0, p, 0.3f, 0.44f, 0.48f, 0.7f)
-        l.scheduleOut(1, p, 0.36f, 0.5f, 0.56f, 0.8f)
-        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.82f) / 0.14f))
-        // Shadow and lip light read the halves' approach, so they run on 1 - e
-        fanaleHalves(canvas, l, w, h, xl, xr, 1f - eL, 1f - eR, fade)
-        // The last point of light: the two tips meet on the crease, dip into the hinge, go out
-        val glint = FoldMath.smooth(FoldMath.clamp((p - 0.74f) / 0.06f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.84f) / 0.12f)))
-        if (glint > 0.004f) {
-            val wd = FoldMath.clamp((p - 0.78f) / 0.18f)
-            val gy = h * 0.5f - l.ringRadius * 0.18f + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
-            l.glow(canvas, cx, gy, w * 0.045f, w * 0.045f, 0.55f * glint)
-            l.coreDot(canvas, cx, gy, l.ringRadius * 0.08f, 0.9f * glint)
+        val e = closeTravel(p)
+        val xl = cx * e
+        val xr = w - (w - cx) * e
+        val r0 = 0.18f; val r1 = 0.34f; val b1 = 0.46f
+        for (side in 0..1) {
+            if (circuit) l.scheduleCircuit(side, p, r0, r1, r1 + 0.005f, b1)
+            else l.scheduleIgnite(side, p, r0, r1, r1 + 0.005f, b1, barFromTip = false)
+        }
+        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.14f))
+        fanaleHalves(canvas, l, w, h, xl, xr, 1f - e, 1f - e, fade)
+        closeMeetAndStrip(canvas, l, w, h, xl, xr, b1)
+    }
+
+    /**
+     * How far the closing halves have come in (0 at the edges, 1 met) for the closing's
+     * progress p: most of the way in quickly, then the last stretch over the flourish, meeting
+     * exactly at the plan's contact (BUILD_END).
+     */
+    private fun closeTravel(p: Float): Float {
+        val end = MotionConfig.BUILD_END
+        val fast = 0.9f * FoldMath.magnetOut(FoldMath.clamp(p / 0.2f))
+        val slow = 0.1f * FoldMath.smooth(FoldMath.clamp((p - 0.2f) / (end - 0.2f)))
+        return if (p >= end) 1f else fast + slow
+    }
+
+    /**
+     * The last two points of light running from the bar tips across the remaining gap to meet
+     * in the centre at contact, then the thin strip of light on the crease drawing in to a point.
+     */
+    private fun closeMeetAndStrip(canvas: Canvas, l: Lamps, w: Float, h: Float, xl: Float, xr: Float, from: Float) {
+        val cx = w / 2f
+        val y0 = l.barLine
+        val end = MotionConfig.BUILD_END
+        val core = l.ringRadius * 0.08f
+        if (p in from..end) {
+            val k = FoldMath.smooth(FoldMath.clamp((p - from) / (end - from)))
+            for (side in 0..1) {
+                val tip = l.tipX(side, if (side == 0) xl - cx else xr - cx)
+                val x = tip + (cx - tip) * k
+                l.glow(canvas, x, y0, w * 0.022f, w * 0.022f, 0.55f)
+                l.coreDot(canvas, x, y0, core, 0.95f)
+            }
+        }
+        if (p < end) return
+        // The strip: full height at contact, drawing in towards the bar line, thinning as it goes
+        val u = FoldMath.clamp((p - end) / 0.36f)
+        val g = FoldMath.glide(u)
+        val half = (h * 0.5f) * (1f - g)
+        val top = y0 - half; val bottom = y0 + half
+        val flash = 1f - FoldMath.smooth(FoldMath.clamp((p - end) / 0.05f)) * 0.35f
+        val gone = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.88f) / 0.1f))
+        if (half > 1f) {
+            l.glow(canvas, cx, y0, w * 0.028f * (1f - 0.5f * g), half + w * 0.02f, 0.32f * flash * gone * density.coerceAtLeast(0.5f))
+            l.line(canvas, cx, top, bottom, max(1.2f, w * 0.0016f * (1f - 0.6f * g)), 0.95f * flash * gone)
+        }
+        // The point it leaves: dips into the hinge and goes out
+        val pt = FoldMath.smooth(FoldMath.clamp((u - 0.75f) / 0.1f)) * gone
+        if (pt > 0.004f) {
+            val wd = FoldMath.clamp((p - (end + 0.3f)) / 0.12f)
+            val gy = y0 + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
+            l.glow(canvas, cx, gy, w * 0.04f, w * 0.04f, 0.5f * pt)
+            l.coreDot(canvas, cx, gy, core, 0.9f * pt)
         }
     }
+
 
     /**
      * Fanale reversed, rebuilt (25 Oct 2026). It used to be the closing run backwards, which lit
@@ -1457,20 +1511,23 @@ class FoldOverlayView(context: Context) : View(context) {
 
     /**
      * Giulietta, closing (25 Oct 2026): the Giulietta opening's materials, closing. Two halves of
-     * dark Visconti glass slide in from the edges together, their rear lamps lit and a line of
-     * green light on each lip. They meet on the crease (the click) with a breath of light along
-     * the seam; then the lamps go out like an indicator and the last light dips into the hinge.
+     * dark Visconti glass sweep in together, a line of green light on each lip, and nearly meet.
+     * The rear lamps light round their rings and down their bars, the last two points cross the
+     * gap and meet in the centre as the glass closes (the click), and a thin strip of light on
+     * the crease draws in to a point and dips into the hinge.
      */
     private fun drawGiuliettaClose(canvas: Canvas, w: Float, h: Float) {
         val cx = w / 2f
-        val e = FoldMath.clamp(p / MotionConfig.BUILD_END)
+        val e = closeTravel(p)
         val sl = cx * e
         val sr = w - (w - cx) * e
         val shut = sr - sl <= 1f
         val l = if (MotionConfig.LAMP_GLASS_ROSSO) rosso else visconti
         l.layout(w, h)
-        l.scheduleOut(0, p, 0.58f, 0.7f, 0.72f, 0.84f)
-        l.scheduleOut(1, p, 0.58f, 0.7f, 0.72f, 0.84f)
+        // The flourish (25 Oct 2026): round the rings, down the bars, to the centre
+        for (side in 0..1) l.scheduleIgnite(side, p, 0.18f, 0.34f, 0.345f, 0.46f, barFromTip = false)
+        val lampFade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.14f))
+        if (lampFade < 1f) l.scale(lampFade)
         // The glass (this canvas is mirrored: screen x is w - x here)
         val c0 = canvas.save()
         if (!shut) {
@@ -1500,17 +1557,11 @@ class FoldOverlayView(context: Context) : View(context) {
         drawGlassLamps(canvas, l, w, if (shut) cx else sl, if (shut) cx else sr)
         // The glass goes dark with the lamps
         if (p > 0.84f) { blackPaint.alpha = (255 * (1f - fade)).toInt(); canvas.drawRect(0f, 0f, w + 1f, h, blackPaint); blackPaint.alpha = 255 }
-        // The last light dips into the hinge
-        val glint = FoldMath.smooth(FoldMath.clamp((p - 0.82f) / 0.04f)) * (1f - FoldMath.smooth(FoldMath.clamp((p - 0.88f) / 0.1f)))
-        if (glint > 0.004f) {
-            val c = canvas.save()
-            if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
-            val wd = FoldMath.clamp((p - 0.84f) / 0.14f)
-            val gy = l.barLine + h * 0.016f * kotlin.math.sin(Math.PI.toFloat() * wd) * (1f - wd)
-            l.glow(canvas, cx, gy, w * 0.045f, w * 0.045f, 0.55f * glint)
-            l.coreDot(canvas, cx, gy, l.ringRadius * 0.08f, 0.9f * glint)
-            canvas.restoreToCount(c)
-        }
+        // The last points meet in the centre at contact, and the strip of light draws in
+        val c = canvas.save()
+        if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
+        closeMeetAndStrip(canvas, l, w, h, sl, sr, 0.46f)
+        canvas.restoreToCount(c)
     }
 
     /**
@@ -1554,18 +1605,7 @@ class FoldOverlayView(context: Context) : View(context) {
      * the ring, down the bars, until the two last points run in from the tips and meet on the
      * crease, dip into the hinge and go out.
      */
-    private fun drawCircuitoClose(canvas: Canvas, w: Float, h: Float) {
-        val cx = w / 2f
-        val l = rosso
-        l.layout(w, h)
-        val e = FoldMath.clamp(p / MotionConfig.BUILD_END)
-        val xl = cx * e
-        val xr = w - (w - cx) * e
-        for (side in 0..1) l.scheduleCircuit(side, p, 0.3f, 0.5f, 0.52f, 0.72f, out = true)
-        val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.84f) / 0.12f))
-        fanaleHalves(canvas, l, w, h, xl, xr, 1f - e, 1f - e, fade)
-        if (xr - xl < 2f) circuitoMeet(canvas, l, w, h, p, 0.72f, 0.8f, 0f, closing = true)
-    }
+    private fun drawCircuitoClose(canvas: Canvas, w: Float, h: Float) = drawLampsClose(canvas, w, h, circuit = true)
 
     /**
      * The two points of light crossing from the bar tips to the crease between [from] and [at],
