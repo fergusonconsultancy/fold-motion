@@ -37,6 +37,15 @@ object FoldMath {
      * The release uses smootherstep (18 Oct 2026): a rounded speed peak of 2.26x at 60%.
      * It was glide, whose speed rose to a sharp 3.6x point.
      */
+    /** The share of the build's time that has passed when magnetIn reaches [y] (for timing within a closing). */
+    fun magnetInTime(y: Float): Float {
+        if (y <= 0f) return 0f
+        if (y >= 1f) return 1f
+        var lo = 0f; var hi = 1f
+        repeat(18) { val mid = (lo + hi) / 2f; if (magnetIn(mid) < y) lo = mid else hi = mid }
+        return (lo + hi) / 2f
+    }
+
     fun magnetOut(u: Float): Float {
         val c = clamp(u)
         val hold = 0.2f

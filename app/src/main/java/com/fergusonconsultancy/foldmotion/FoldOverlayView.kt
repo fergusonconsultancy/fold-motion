@@ -1393,42 +1393,51 @@ class FoldOverlayView(context: Context) : View(context) {
         val cx = w / 2f
         val l = rosso
         l.layout(w, h)
-        val e = closeTravel(p)
+        // Timed on the fold's own time, not on progress: progress accelerates into contact,
+        // which would cram the flourish into the last instant
+        val q = buildTime()
+        val e = closeTravel(q)
         val xl = cx * e
         val xr = w - (w - cx) * e
-        val r0 = 0.18f; val r1 = 0.34f; val b1 = 0.46f
         for (side in 0..1) {
-            if (circuit) l.scheduleCircuit(side, p, r0, r1, r1 + 0.005f, b1)
-            else l.scheduleIgnite(side, p, r0, r1, r1 + 0.005f, b1, barFromTip = false)
+            if (circuit) l.scheduleCircuit(side, q, RING_FROM, RING_TO, RING_TO + 0.01f, BAR_TO)
+            else l.scheduleIgnite(side, q, RING_FROM, RING_TO, RING_TO + 0.01f, BAR_TO, barFromTip = false)
         }
         val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.14f))
         fanaleHalves(canvas, l, w, h, xl, xr, 1f - e, 1f - e, fade)
-        closeMeetAndStrip(canvas, l, w, h, xl, xr, b1)
+        closeMeetAndStrip(canvas, l, w, h, xl, xr, q)
     }
+
+    /** The closing flourish's schedule, as shares of the fold's build time. */
+    private val RING_FROM = 0.22f
+    private val RING_TO = 0.58f
+    private val BAR_TO = 0.82f
+
+    /** How much of the build's time has passed (1 from contact on). */
+    private fun buildTime(): Float = if (p >= MotionConfig.BUILD_END) 1f else FoldMath.magnetInTime(p / MotionConfig.BUILD_END)
 
     /**
      * How far the closing halves have come in (0 at the edges, 1 met) for the closing's
      * progress p: most of the way in quickly, then the last stretch over the flourish, meeting
      * exactly at the plan's contact (BUILD_END).
      */
-    private fun closeTravel(p: Float): Float {
-        val end = MotionConfig.BUILD_END
-        val fast = 0.9f * FoldMath.magnetOut(FoldMath.clamp(p / 0.2f))
-        val slow = 0.1f * FoldMath.smooth(FoldMath.clamp((p - 0.2f) / (end - 0.2f)))
-        return if (p >= end) 1f else fast + slow
+    private fun closeTravel(q: Float): Float {
+        val fast = 0.9f * FoldMath.magnetOut(FoldMath.clamp(q / 0.3f))
+        val slow = 0.1f * FoldMath.smooth(FoldMath.clamp((q - 0.3f) / 0.7f))
+        return if (q >= 1f) 1f else fast + slow
     }
 
     /**
      * The last two points of light running from the bar tips across the remaining gap to meet
      * in the centre at contact, then the thin strip of light on the crease drawing in to a point.
      */
-    private fun closeMeetAndStrip(canvas: Canvas, l: Lamps, w: Float, h: Float, xl: Float, xr: Float, from: Float) {
+    private fun closeMeetAndStrip(canvas: Canvas, l: Lamps, w: Float, h: Float, xl: Float, xr: Float, q: Float) {
         val cx = w / 2f
         val y0 = l.barLine
         val end = MotionConfig.BUILD_END
         val core = l.ringRadius * 0.08f
-        if (p in from..end) {
-            val k = FoldMath.smooth(FoldMath.clamp((p - from) / (end - from)))
+        if (p < end && q >= BAR_TO) {
+            val k = FoldMath.smooth(FoldMath.clamp((q - BAR_TO) / (1f - BAR_TO)))
             for (side in 0..1) {
                 val tip = l.tipX(side, if (side == 0) xl - cx else xr - cx)
                 val x = tip + (cx - tip) * k
@@ -1518,14 +1527,15 @@ class FoldOverlayView(context: Context) : View(context) {
      */
     private fun drawGiuliettaClose(canvas: Canvas, w: Float, h: Float) {
         val cx = w / 2f
-        val e = closeTravel(p)
+        val q = buildTime()
+        val e = closeTravel(q)
         val sl = cx * e
         val sr = w - (w - cx) * e
         val shut = sr - sl <= 1f
         val l = if (MotionConfig.LAMP_GLASS_ROSSO) rosso else visconti
         l.layout(w, h)
         // The flourish (25 Oct 2026): round the rings, down the bars, to the centre
-        for (side in 0..1) l.scheduleIgnite(side, p, 0.18f, 0.34f, 0.345f, 0.46f, barFromTip = false)
+        for (side in 0..1) l.scheduleIgnite(side, q, RING_FROM, RING_TO, RING_TO + 0.01f, BAR_TO, barFromTip = false)
         val lampFade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.14f))
         if (lampFade < 1f) l.scale(lampFade)
         // The glass (this canvas is mirrored: screen x is w - x here)
@@ -1539,7 +1549,7 @@ class FoldOverlayView(context: Context) : View(context) {
         glassMaterial(canvas, w, h, 1f, w * 1.6f, front = false)
         canvas.restoreToCount(c0)
         // The lips: a line of light on each leading edge, gone at contact
-        val lip = FoldMath.smooth(FoldMath.clamp(e / 0.15f)) * (1f - FoldMath.smooth(FoldMath.clamp((e - 0.9f) / 0.1f)))
+        val lip = FoldMath.smooth(FoldMath.clamp(e / 0.15f)) * (1f - FoldMath.smooth(FoldMath.clamp((e - 0.97f) / 0.03f)))
         if (!shut && lip > 0.004f) {
             greenBand(canvas, w - sl, 0f, h, w * 0.02f, 0.35f * lip * density, w - sl - w * 0.05f, w - sl)
             greenBand(canvas, w - sr, 0f, h, w * 0.02f, 0.35f * lip * density, w - sr, w - sr + w * 0.05f)
@@ -1560,7 +1570,7 @@ class FoldOverlayView(context: Context) : View(context) {
         // The last points meet in the centre at contact, and the strip of light draws in
         val c = canvas.save()
         if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
-        closeMeetAndStrip(canvas, l, w, h, sl, sr, 0.46f)
+        closeMeetAndStrip(canvas, l, w, h, sl, sr, q)
         canvas.restoreToCount(c)
     }
 
