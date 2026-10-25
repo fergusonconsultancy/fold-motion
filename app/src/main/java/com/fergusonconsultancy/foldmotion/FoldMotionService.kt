@@ -523,8 +523,20 @@ class FoldMotionService : Service(), SensorEventListener {
     /** When the cover was blacked out for an opening: the start of Concentrato's speed reading. */
     private var armedAt = 0L
 
+    /**
+     * Tells Fold Taskbar (25 Oct 2026) when an opening covers the screen and when the screen is
+     * whole again, so the bar makes its entrance as the reveal ends rather than appearing over
+     * it. A plain broadcast to that one app; it carries nothing but the phase.
+     */
+    private fun tellTaskbar(phase: String) {
+        runCatching {
+            sendBroadcast(android.content.Intent("com.fergusonconsultancy.foldmotion.REVEAL")
+                .setPackage("com.fergusonconsultancy.foldtaskbar").putExtra("phase", phase))
+        }
+    }
+
     private fun enter(next: Phase) {
-        if (next == Phase.ARMED) armedAt = SystemClock.uptimeMillis()
+        if (next == Phase.ARMED) { armedAt = SystemClock.uptimeMillis(); tellTaskbar("covering") }
         if (animScale() <= 0f) { finish(); return }
         phase = next
         phaseAt = SystemClock.uptimeMillis()
@@ -603,6 +615,7 @@ class FoldMotionService : Service(), SensorEventListener {
             getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
         }.getOrDefault(false)
         if (!afterUnlock && locked) {
+            tellTaskbar("covering")
             phase = Phase.AWAIT_UNLOCK
             phaseAt = SystemClock.uptimeMillis()
             overlay?.show(1f)
@@ -757,7 +770,7 @@ class FoldMotionService : Service(), SensorEventListener {
                 }
                 // k is real time: the effects draw on unglide(glide(k)), which is k
                 if (!releaseDone && k >= clickAt) { releaseDone = true; haptics.release() }
-                if (!touchDone && k >= touchAt) { touchDone = true; setActiveWindow(true, touchThrough = true) }
+                if (!touchDone && k >= touchAt) { touchDone = true; setActiveWindow(true, touchThrough = true); tellTaskbar("revealed") }
                 if (k >= 1f) {
                     val r = stats.result()
                     EventLog.add(
@@ -778,6 +791,7 @@ class FoldMotionService : Service(), SensorEventListener {
     }
 
     private fun finish() {
+        if (phase != Phase.IDLE) tellTaskbar("revealed")
         phase = Phase.IDLE
         ticking = false
         Choreographer.getInstance().removeFrameCallback(frameCallback)
