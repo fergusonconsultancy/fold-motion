@@ -385,6 +385,22 @@ class FoldOverlayView(context: Context) : View(context) {
         val layer = if (alphaAll < 1f) canvas.saveLayerAlpha(0f, 0f, w, h, (255 * alphaAll).toInt()) else -1
         val tod = todPaint?.let { canvas.saveLayer(0f, 0f, w, h, it) } ?: -1
 
+        // 29 Oct 2026: every effect is drawn about a crease down the middle. On its side the
+        // inner screen's crease runs across, so the drawing is turned a quarter to lie along it
+        if (creaseAcross) {
+            val turn = canvas.save()
+            canvas.translate(w, 0f); canvas.rotate(90f)
+            drawEffect(canvas, h, w)
+            canvas.restoreToCount(turn)
+        } else drawEffect(canvas, w, h)
+        if (tod >= 0) canvas.restoreToCount(tod)
+        if (layer >= 0) canvas.restoreToCount(layer)
+    }
+
+    /** Whether the crease runs across the screen (the phone on its side). Set by the service from the hinge itself. */
+    var creaseAcross = false
+
+    private fun drawEffect(canvas: Canvas, w: Float, h: Float) {
         // Drawn with the leading edge on the right; mirrored so it moves left to right
         val flip = canvas.save()
         if (MotionConfig.LEFT_TO_RIGHT) canvas.scale(-1f, 1f, w / 2f, 0f)
@@ -432,8 +448,6 @@ class FoldOverlayView(context: Context) : View(context) {
         }
 
         canvas.restoreToCount(flip)
-        if (tod >= 0) canvas.restoreToCount(tod)
-        if (layer >= 0) canvas.restoreToCount(layer)
     }
 
     // region De Stijl, One Plane (closing)

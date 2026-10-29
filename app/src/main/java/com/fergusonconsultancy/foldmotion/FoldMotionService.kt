@@ -553,6 +553,7 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private fun startClose(now: Long, scale: Float) {
         overlay?.mode = FoldOverlayView.Mode.CLOSE
+        overlay?.creaseAcross = creaseRunsAcross()
         overlay?.setTimeOfDay(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
         // Planned backwards from when this owner's closes usually switch to the cover:
         // the finale always gets its full length and lands just before the switch
@@ -583,6 +584,14 @@ class FoldMotionService : Service(), SensorEventListener {
     }
 
     /** Fold posture changed. Starts the closing effect the moment the main screen leaves flat. */
+    /** From the hinge (FoldingFeature) when it has reported; otherwise from the screen's rotation. */
+    private var creaseAcross: Boolean? = null
+
+    private fun creaseRunsAcross(): Boolean = creaseAcross ?: runCatching {
+        val r = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(android.view.Display.DEFAULT_DISPLAY).rotation
+        r == android.view.Surface.ROTATION_90 || r == android.view.Surface.ROTATION_270
+    }.getOrDefault(false)
+
     private fun onPosture(info: androidx.window.layout.WindowLayoutInfo) {
         val fold = info.displayFeatures.firstOrNull { it is androidx.window.layout.FoldingFeature }
             as? androidx.window.layout.FoldingFeature
@@ -590,6 +599,8 @@ class FoldMotionService : Service(), SensorEventListener {
         val half = fold?.state == androidx.window.layout.FoldingFeature.State.HALF_OPENED
         val was = postureFlat
         postureFlat = if (fold == null) null else flat
+        // The hinge says which way the crease runs on the screen as it is held now
+        if (fold != null) creaseAcross = fold.orientation == androidx.window.layout.FoldingFeature.Orientation.HORIZONTAL
         if (was != true || !half) return
         val now = SystemClock.uptimeMillis()
         val scale = animScale()
@@ -647,6 +658,7 @@ class FoldMotionService : Service(), SensorEventListener {
         runCatching {
             val b = windowManager.currentWindowMetrics.bounds
             overlay?.setContentSize(b.width(), b.height())
+            overlay?.creaseAcross = creaseRunsAcross()
         }
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         Choreographer.getInstance().postFrameCallback(frameCallback)
