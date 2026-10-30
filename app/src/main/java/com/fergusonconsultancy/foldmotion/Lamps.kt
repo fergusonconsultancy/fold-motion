@@ -162,6 +162,44 @@ class Lamps(rosso: Boolean) {
         }
     }
 
+    /**
+     * One head of light sweeping a ring's full circle from angle [start] (radians, 0 at three
+     * o'clock), [dir] +1 clockwise on screen or -1 anticlockwise, between [r0] and [r1].
+     */
+    fun sweepRing(side: Int, t: Float, r0: Float, r1: Float, start: Float, dir: Int) {
+        val lv = level[side]
+        val twoPi = 2f * Math.PI.toFloat()
+        for (i in 0 until RING_BEADS) {
+            var d = (ringAngle(side, i) - start) * dir % twoPi
+            if (d < 0f) d += twoPi
+            lv[i] = ignite(t, r0 + (r1 - r0) * d / twoPi)
+        }
+    }
+
+    /** Two heads from angle [start], one each way round, meeting opposite it at [r1]. */
+    fun ringBothWays(side: Int, t: Float, r0: Float, r1: Float, start: Float) {
+        val lv = level[side]
+        val twoPi = 2f * Math.PI.toFloat()
+        for (i in 0 until RING_BEADS) {
+            var d = (ringAngle(side, i) - start) % twoPi
+            if (d < 0f) d += twoPi
+            if (d > Math.PI.toFloat()) d = twoPi - d
+            lv[i] = ignite(t, r0 + (r1 - r0) * d / Math.PI.toFloat())
+        }
+    }
+
+    /** A bar lit by one head, from the ring to the tip ([fromTip] false) or the tip to the ring. */
+    fun barRun(side: Int, t: Float, b0: Float, b1: Float, fromTip: Boolean) {
+        val lv = level[side]
+        for (j in 0 until BAR_BEADS) {
+            val k = j / (BAR_BEADS - 1f)
+            lv[RING_BEADS + j] = ignite(t, b0 + (b1 - b0) * (if (fromTip) 1f - k else k))
+        }
+    }
+
+    /** The angle at which a bar leaves its ring: three o'clock on the left lamp, nine on the right. */
+    fun attach(side: Int) = if (side == 0) -0.18f else Math.PI.toFloat() + 0.18f
+
     /** Where a bar's tip sits (screen x), for the light that crosses the gap to the crease. */
     fun tipX(side: Int, offset: Float) = beadX(side, RING_BEADS + BAR_BEADS - 1, offset)
     val barLine get() = barY
