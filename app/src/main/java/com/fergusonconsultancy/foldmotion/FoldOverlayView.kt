@@ -1408,15 +1408,15 @@ class FoldOverlayView(context: Context) : View(context) {
         val q = buildTime()
         val e = closeTravel(q)
         val xl = cx * e; val xr = w - (w - cx) * e
-        l.sweepRing(0, q, 0.2f, 0.38f, l.attach(0), +1)
-        l.barRun(0, q, 0.38f, 0.5f, fromTip = false)
-        l.barRun(1, q, 0.6f, 0.72f, fromTip = true)
-        l.sweepRing(1, q, 0.72f, 0.92f, l.attach(1), -1)
+        l.sweepRing(0, q, 0.04f, 0.3f, l.attach(0), +1)
+        l.barRun(0, q, 0.3f, 0.42f, fromTip = false)
+        l.barRun(1, q, 0.52f, 0.64f, fromTip = true)
+        l.sweepRing(1, q, 0.64f, 0.92f, l.attach(1), -1)
         val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.14f))
         fanaleHalves(canvas, l, w, h, xl, xr, 1f - e, 1f - e, fade)
         // The crossing: one point from the left bar's tip over the crease to the right bar's tip
-        if (p < MotionConfig.BUILD_END && q in 0.5f..0.6f) {
-            val k = FoldMath.smooth((q - 0.5f) / 0.1f)
+        if (p < MotionConfig.BUILD_END && q in 0.42f..0.52f) {
+            val k = FoldMath.smooth((q - 0.42f) / 0.1f)
             val a = l.tipX(0, xl - cx); val b = l.tipX(1, xr - cx)
             val x = a + (b - a) * k
             l.glow(canvas, x, l.barLine, w * 0.022f, w * 0.022f, 0.55f)
@@ -1447,9 +1447,9 @@ class FoldOverlayView(context: Context) : View(context) {
     }
 
     /** The closing flourish's schedule, as shares of the fold's build time. */
-    private val RING_FROM = 0.22f
-    private val RING_TO = 0.58f
-    private val BAR_TO = 0.82f
+    private val RING_FROM = 0.05f
+    private val RING_TO = 0.5f
+    private val BAR_TO = 0.75f
 
     /** How much of the build's time has passed (1 from contact on). */
     private fun buildTime(): Float = if (p >= MotionConfig.BUILD_END) 1f else FoldMath.magnetInTime(p / MotionConfig.BUILD_END)
@@ -1460,8 +1460,10 @@ class FoldOverlayView(context: Context) : View(context) {
      * exactly at the plan's contact (BUILD_END).
      */
     private fun closeTravel(q: Float): Float {
-        val fast = 0.9f * FoldMath.magnetOut(FoldMath.clamp(q / 0.3f))
-        val slow = 0.1f * FoldMath.smooth(FoldMath.clamp((q - 0.3f) / 0.7f))
+        // 30 Oct 2026: in within the first tenth of the fold, so the lamps are on screen for the
+        // whole of their path (they used to ride in from off screen and miss its first third)
+        val fast = 0.94f * FoldMath.magnetOut(FoldMath.clamp(q / 0.1f))
+        val slow = 0.06f * FoldMath.smooth(FoldMath.clamp((q - 0.1f) / 0.9f))
         return if (q >= 1f) 1f else fast + slow
     }
 
@@ -1668,16 +1670,16 @@ class FoldOverlayView(context: Context) : View(context) {
         val e = closeTravel(q)
         val xl = cx * e; val xr = w - (w - cx) * e
         for (side in 0..1) {
-            l.barRun(side, q, 0.34f, 0.5f, fromTip = true)
-            l.ringBothWays(side, q, 0.51f, 0.84f, l.attach(side))
+            l.barRun(side, q, 0.14f, 0.38f, fromTip = true)
+            l.ringBothWays(side, q, 0.39f, 0.84f, l.attach(side))
         }
         val fade = 1f - FoldMath.smooth(FoldMath.clamp((p - 0.8f) / 0.14f))
         fanaleHalves(canvas, l, w, h, xl, xr, 1f - e, 1f - e, fade)
         val y0 = l.barLine
         if (p < MotionConfig.BUILD_END) {
             // The point in the gap, splitting out to both bar tips
-            if (q in 0.24f..0.34f) {
-                val k = FoldMath.smooth((q - 0.24f) / 0.1f)
+            if (q in 0.04f..0.14f) {
+                val k = FoldMath.smooth((q - 0.04f) / 0.1f)
                 for (side in 0..1) {
                     val tip = l.tipX(side, if (side == 0) xl - cx else xr - cx)
                     val x = cx + (tip - cx) * k

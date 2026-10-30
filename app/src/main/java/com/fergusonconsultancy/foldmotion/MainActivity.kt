@@ -372,7 +372,7 @@ class Stage(ctx: Context) : FrameLayout(ctx) {
         overlay.setContentSize(width, height)
         // Speed as the service applies it: the whole run shortens or stretches
         val speed = if (open) MotionConfig.openSpeed(context) else MotionConfig.closeSpeed(context)
-        val build = 600f / speed; val finale = MotionConfig.FINALE_MS / speed
+        val build = 600f / speed; val finale = MotionConfig.finaleMsFor(MotionConfig.CLOSING_EFFECT) / speed
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = if (open) (MotionConfig.REVEAL_MS / speed).toLong() else (build + finale).toLong()
             interpolator = null
