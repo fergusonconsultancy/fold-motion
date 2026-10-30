@@ -561,7 +561,7 @@ class FoldMotionService : Service(), SensorEventListener {
         // Speed (set in the app) shortens or lengthens the plan; the switch still caps it
         val speed = MotionConfig.closeSpeed(this).coerceIn(MotionConfig.SPEED_MIN, MotionConfig.SPEED_MAX)
         overlay?.brightness = MotionConfig.closeBrightness(this)
-        val plan = Plan.make(predicted?.let { it }, scale / speed)
+        val plan = Plan.make(predicted?.let { it }, scale / speed, MotionConfig.finaleMsFor(MotionConfig.CLOSING_EFFECT))
         finaleAt = plan.buildMs
         finaleMs = plan.finaleMs
         // Concentrato: less time to build means a faster close, so fewer details

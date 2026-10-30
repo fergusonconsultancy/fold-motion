@@ -217,6 +217,18 @@ object MotionConfig {
      * (0 to BUILD_END) gets what is left, never less than MIN_BUILD_MS.
      */
     const val FINALE_MS = 300L
+
+    /**
+     * 30 Oct 2026: a lamp closing's light path is the point of it, so its seal (the strip of
+     * light after contact) is kept short and the path gets the rest of the fold. At a typical
+     * half-second fold that is about two thirds of it, where it used to be about a third.
+     */
+    const val LAMP_FINALE_MS = 130L
+
+    fun finaleMsFor(e: Effect) = when (e) {
+        Effect.FANALE, Effect.FANALE_REVERSE, Effect.CIRCUITO -> LAMP_FINALE_MS
+        else -> FINALE_MS
+    }
     const val BUILD_END = 0.55f
     const val SWITCH_SAFETY_MS = 40L
     const val MIN_BUILD_MS = 60L

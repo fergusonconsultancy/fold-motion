@@ -87,8 +87,8 @@ object Timing {
  */
 data class Plan(val buildMs: Float, val finaleMs: Float) {
     companion object {
-        fun make(predictedSwitchMs: Float?, scale: Float): Plan {
-            val finale = MotionConfig.FINALE_MS * scale
+        fun make(predictedSwitchMs: Float?, scale: Float, finaleMs: Long = MotionConfig.FINALE_MS): Plan {
+            val finale = finaleMs * scale
             val fullBuild = (MotionConfig.EFFECT_MS - MotionConfig.FINALE_MS) * scale
             val available = (predictedSwitchMs ?: (MotionConfig.EFFECT_MS * scale)) - finale - MotionConfig.SWITCH_SAFETY_MS
             return Plan(available.coerceIn(MotionConfig.MIN_BUILD_MS * scale, fullBuild), finale)
