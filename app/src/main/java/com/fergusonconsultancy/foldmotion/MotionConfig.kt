@@ -35,11 +35,17 @@ object MotionConfig {
      * The pairings Mechack chooses between in the app (23 Oct 2026). Each names its closing and
      * opening; [apply] sets them before every run.
      */
+    /**
+     * The transitions (30 Oct 2026): four, in alphabetical order, and the same four names in
+     * every list. Each is one path of light (or one membrane); its closing retraces the path its
+     * opening takes, in the opposite direction, so opening and closing are one gesture, there
+     * and back. Choosing one here sets both; they can still be mixed below.
+     */
     enum class Style(val label: String, val detail: String, val closing: Effect, val opening: Effect) {
-        GIULIETTA("Giulietta", "Dark Visconti glass and the Giulietta's rear lamps, opening and closing", Effect.LAMP_GLASS, Effect.LAMP_GLASS),
-        FANALE("Fanale", "Alfa Romeo only: the lamps light, part and lock", Effect.FANALE, Effect.FANALE),
-        MEMBRANA("Membrana", "One living membrane parts on curves and snaps taut", Effect.MEMBRANA, Effect.MEMBRANA),
-        CIRCUITO("Circuito", "Both lamps run their circuit in step and meet on the crease", Effect.CIRCUITO, Effect.CIRCUITO),
+        CIRCUITO("Circuito", "Both lamps light at their outer edges and the light runs round the rings and in to the crease. Closing runs it back out.", Effect.CIRCUITO, Effect.CIRCUITO),
+        FANALE("Fanale", "The lamps light one after the other, right then left, like unlocking the car. Closing runs the same path back, left then right.", Effect.FANALE, Effect.FANALE),
+        FANALE_REVERSE("Fanale reversed", "Light rises from the hinge, out along the bars and round the rings. Closing runs it back round the rings and in to the crease.", Effect.FANALE_REVERSE, Effect.FANALE_REVERSE),
+        MEMBRANA("Membrana", "One membrane parts from the crease on two curves and snaps taut. Closing draws it back in, the same curves in reverse.", Effect.MEMBRANA, Effect.MEMBRANA),
     }
 
     /** The colour of Membrana's rim light: glow and core. */
@@ -76,7 +82,7 @@ object MotionConfig {
 
     fun style(context: android.content.Context): Style = runCatching {
         Style.valueOf(context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(STYLE_KEY, null)!!)
-    }.getOrDefault(Style.GIULIETTA)
+    }.getOrDefault(Style.FANALE)
 
     /** A preset: sets the opening and the closing together. */
     fun setStyle(context: android.content.Context, s: Style) {
@@ -88,19 +94,18 @@ object MotionConfig {
 
     /** The openings offered in the app. */
     enum class Opening(val label: String, val detail: String, val effect: Effect) {
-        GIULIETTA("Giulietta", "Lit glass, woken by the rear lamps", Effect.LAMP_GLASS),
-        FANALE("Fanale", "The lamps light in sequence, bloom, and the halves part", Effect.FANALE),
-        CIRCUITO("Circuito", "Both lamps light at their outer edge at once, run round the ring and along the bar, and meet on the crease", Effect.CIRCUITO),
+        CIRCUITO("Circuito", "From both lamps' outer edges, round each ring both ways, in along the bars; the two lights meet on the crease, bloom, and the halves part", Effect.CIRCUITO),
+        FANALE("Fanale", "The right ring sweeps round and its bar runs in to the crease; the light crosses, runs out along the left bar and closes the left ring; the lamps bloom and the halves part", Effect.FANALE),
         FANALE_REVERSE("Fanale reversed", "A point of light rises from the hinge, splits, runs out along both bars and sweeps the full circle of each ring; the lamps bloom and the halves part", Effect.FANALE_REVERSE),
-        MEMBRANA("Membrana", "One membrane parts on curves and snaps taut", Effect.MEMBRANA),
+        MEMBRANA("Membrana", "A seam of light gives; the membrane parts on two curves, its middle leading, and snaps taut", Effect.MEMBRANA),
     }
 
     /** The closings offered in the app. */
     enum class Closing(val label: String, val detail: String, val effect: Effect) {
-        GIULIETTA("Giulietta", "The glass halves sweep in; the lamps light round their rings and down their bars, meet in the centre as the glass closes, and leave a thin strip of light", Effect.LAMP_GLASS),
-        FANALE("Fanale", "The halves sweep in; each ring is swept by a head of light that runs down its bar, and the two meet in the centre as a thin strip of light", Effect.FANALE),
-        CIRCUITO("Circuito", "The halves sweep in; each ring lights from its outer edge both ways, the light runs down the bars and meets in the centre as a thin strip of light", Effect.CIRCUITO),
-        MEMBRANA("Membrana", "The membrane is drawn in to a lens that seals into a last point of light", Effect.MEMBRANA),
+        CIRCUITO("Circuito", "The opening run back: a point in the closing gap splits, runs out along both bars and round each ring both ways, meeting at the outer edges; the halves seal on a strip of light", Effect.CIRCUITO),
+        FANALE("Fanale", "The opening run back: round the left ring, down its bar, across the crease, out along the right bar and round the right ring; the halves seal on a strip of light", Effect.FANALE),
+        FANALE_REVERSE("Fanale reversed", "The opening run back: the left ring from three o'clock clockwise, the right from nine anticlockwise, then in along both bars to meet in the middle as the halves seal", Effect.FANALE_REVERSE),
+        MEMBRANA("Membrana", "The opening run back: the rim lights at the edges and the membrane comes in on the same curves, its middle trailing, gathering into the seam", Effect.MEMBRANA),
     }
 
     private const val OPENING_KEY = "opening_effect"
@@ -109,11 +114,11 @@ object MotionConfig {
 
     fun opening(c: android.content.Context): Opening =
         Opening.entries.firstOrNull { it.effect.name == prefs(c).getString(OPENING_KEY, null) }
-            ?: Opening.entries.firstOrNull { it.effect == style(c).opening } ?: Opening.GIULIETTA
+            ?: Opening.entries.firstOrNull { it.effect == style(c).opening } ?: Opening.FANALE
 
     fun closing(c: android.content.Context): Closing =
         Closing.entries.firstOrNull { it.effect.name == prefs(c).getString(CLOSING_KEY, null) }
-            ?: Closing.entries.firstOrNull { it.effect == style(c).closing } ?: Closing.GIULIETTA
+            ?: Closing.entries.firstOrNull { it.effect == style(c).closing } ?: Closing.FANALE
 
     fun setOpening(c: android.content.Context, o: Opening) { prefs(c).edit().putString(OPENING_KEY, o.effect.name).apply(); apply(c) }
     fun setClosing(c: android.content.Context, k: Closing) { prefs(c).edit().putString(CLOSING_KEY, k.effect.name).apply(); apply(c) }
@@ -144,11 +149,11 @@ object MotionConfig {
     }
 
     /** Closing effect; set from the chosen style. Arch Aperture since 16 Oct 2026 (night). */
-    var CLOSING_EFFECT = Effect.LAMP_GLASS
+    var CLOSING_EFFECT = Effect.FANALE
         private set
 
     /** Opening effect; set from the chosen style. Lit Glass since 22 Oct 2026. */
-    var OPENING_EFFECT = Effect.LAMP_GLASS
+    var OPENING_EFFECT = Effect.FANALE
         private set
 
     /** Giulietta: the lamps in Alfa red inside the dark Visconti glass (false: Visconti light). */
