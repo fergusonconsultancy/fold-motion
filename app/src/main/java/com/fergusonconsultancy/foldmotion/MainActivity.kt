@@ -71,6 +71,11 @@ class MainActivity : Activity(), SensorEventListener {
         // ---- The stage: the transition, live
         stage = Stage(this)
         screen.add(stage, px(26))
+        // The light the stage plays in: the room as the sensor reads it, or each stage to compare
+        val lights = listOf<Float?>(null, 0.05f, 0.5f, 0.95f)
+        screen.add(Segmented(this, listOf("Room", "Daylight", "Dusk", "Dark"), 0) { i ->
+            stage.light = lights[i]; stage.play(open = true)
+        }, px(12))
 
         // ---- Presets: a matched opening and closing in one tap
         screen.section("Transition")
@@ -122,6 +127,8 @@ class MainActivity : Activity(), SensorEventListener {
                 Toggle(this@MainActivity, MotionConfig.concentrato(this@MainActivity)) { MotionConfig.setConcentrato(this@MainActivity, it) }))
             row(Row(this@MainActivity, "Haptics", "A click at the climax, a settle on opening",
                 Toggle(this@MainActivity, Haptics.isEnabled(this@MainActivity)) { Haptics.setEnabled(this@MainActivity, it); refresh() }))
+            row(Row(this@MainActivity, "Follow the room's light", "By day you see the lamp; in the dark, only its light. Off: the clock decides",
+                Toggle(this@MainActivity, MotionConfig.followRoom(this@MainActivity)) { MotionConfig.setFollowRoom(this@MainActivity, it); refresh() }))
         }, px(18))
 
         // ---- Permissions
@@ -157,6 +164,13 @@ class MainActivity : Activity(), SensorEventListener {
         screen.add(diag)
 
         setContentView(screen.root)
+
+        // For the emulator walk-through: hold the stage at one frame in a given light
+        intent?.getStringExtra("hold")?.let { arg ->
+            val (d, p) = arg.split(",").map { it.toFloat() }
+            stage.light = d
+            stage.post { stage.hold(p) }
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -201,7 +215,7 @@ class MainActivity : Activity(), SensorEventListener {
         super.onResume()
         hingeSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
         refresh()
-        stage.postDelayed({ stage.play(open = true) }, 450)
+        if (intent?.hasExtra("hold") != true) stage.postDelayed({ stage.play(open = true) }, 450)
     }
 
     override fun onPause() {
@@ -259,6 +273,7 @@ class MainActivity : Activity(), SensorEventListener {
             appendLine("Opening: ${MotionConfig.opening(this@MainActivity).label} (light ${(MotionConfig.openBrightness(this@MainActivity) * 100).toInt()}%, speed ${MotionConfig.openSpeed(this@MainActivity)}x)")
             appendLine("Closing: ${MotionConfig.closing(this@MainActivity).label} (light ${(MotionConfig.closeBrightness(this@MainActivity) * 100).toInt()}%, speed ${MotionConfig.closeSpeed(this@MainActivity)}x)")
             appendLine("Rim ${MotionConfig.RIM.label.lowercase()}, Concentrato ${if (MotionConfig.concentrato(this@MainActivity)) "on" else "off"}")
+            appendLine(Ambient.describe(this@MainActivity))
             appendLine("Starts after a restart: " + if (AutoStart.isEnabled(this@MainActivity)) "on" else "off")
             appendLine("Service last started: ${Status.describe(this@MainActivity, Status.STARTED)}")
             appendLine("Effect last played: ${Status.describe(this@MainActivity, Status.PLAYED)}")
@@ -277,6 +292,7 @@ class MainActivity : Activity(), SensorEventListener {
             "Membrane" to "Membrana treats the whole screen as one skin. It parts on two hanging curves, its middle leading, thins where it is stretched so your screen shows faintly through, and snaps taut as it lets go. On closing it is drawn back in until the opening is a lens and surface tension seals it.",
             "Concentrato" to "Every style reads how fast you folded. Opening, from the hinge passing 90 degrees to One UI switching; closing, from how quickly you usually close. A fast fold keeps only the movement: no sparks, no glow, no bloom. A slow one keeps every detail. Switch it off and every fold gets everything.",
             "The Giulietta principle" to "The preview's controls stay hidden in the stage until your finger lands on it. Membrana's rim colour only appears when Membrana is chosen. The eyebrows and the lines under each title fall away while you fling the page, and the page itself stretches like one surface.",
+            "The room's light" to "A real lamp looks different by day and by night, so these do too. In daylight you see the lamp: its housing, its dark lens, the unlit LEDs as dark beads, and crisp light with no bloom. At dusk a halo forms and the unlit beads hold embers. In the dark the housing disappears and only light is left, blooming onto your screen, a little dimmer so it is kind to your eyes. The light sensor is read while the screen is on, so it is ready the moment you fold.",
         )
         val DESIGN_NOTES = listOf(
             "Fanale" to "Alfa Romeo alone, like unlocking the car. Opening, the right ring sweeps round and its bar runs in to the crease, the light crosses, runs out along the left bar and closes the left ring; the lamps bloom with the click and the halves part. Closing runs it back: round the left ring the other way, down its bar, across the crease, out along the right bar and round the right ring.",
@@ -304,6 +320,8 @@ class Stage(ctx: Context) : FrameLayout(ctx) {
     private val hinge = ctx.text("", 12f, Kit.INK, 500).apply { letterSpacing = 0.12f; alpha = 0.7f }
     private var anim: ValueAnimator? = null
     private var fast = false
+    /** The light to play in: null follows the room (or the clock), else a fixed darkness to compare stages. */
+    var light: Float? = null
     private val fastChip: TextView
     private val hide = Runnable { showControls(false) }
 
@@ -362,6 +380,21 @@ class Stage(ctx: Context) : FrameLayout(ctx) {
         overlay.setContentSize(w, h)
     }
 
+    /** Holds one frame of the opening at [p] (1 closed, 0 open), for screenshots of each light. */
+    fun hold(p: Float) {
+        // Not laid out yet: try again once the stage has a size
+        if (width == 0 || height == 0) { postDelayed({ hold(p) }, 120); return }
+        anim?.cancel()
+        MotionConfig.apply(context)
+        overlay.mode = FoldOverlayView.Mode.OPEN
+        overlay.density = 1f
+        overlay.brightness = MotionConfig.openBrightness(context)
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        overlay.setLight(hour, light ?: Ambient.darkness(context, hour))
+        overlay.setContentSize(width, height)
+        overlay.show(p)
+    }
+
     /** Plays the opening or the closing of the chosen style, as the service would. */
     fun play(open: Boolean) {
         anim?.cancel()
@@ -369,6 +402,8 @@ class Stage(ctx: Context) : FrameLayout(ctx) {
         overlay.mode = if (open) FoldOverlayView.Mode.OPEN else FoldOverlayView.Mode.CLOSE
         overlay.density = if (fast && MotionConfig.concentrato(context)) MotionConfig.DENSITY_FLOOR else 1f
         overlay.brightness = if (open) MotionConfig.openBrightness(context) else MotionConfig.closeBrightness(context)
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        overlay.setLight(hour, light ?: Ambient.darkness(context, hour))
         overlay.setContentSize(width, height)
         // Speed as the service applies it: the whole run shortens or stretches
         val speed = if (open) MotionConfig.openSpeed(context) else MotionConfig.closeSpeed(context)

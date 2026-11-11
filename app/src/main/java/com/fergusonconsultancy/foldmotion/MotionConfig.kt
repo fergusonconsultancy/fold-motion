@@ -74,6 +74,16 @@ object MotionConfig {
     fun setConcentrato(context: android.content.Context, on: Boolean) =
         context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean("concentrato", on).apply()
 
+    /**
+     * Light follows the room (11 Nov 2026): the lamps take their look from the ambient light
+     * sensor. On by default; off leaves it to the clock.
+     */
+    fun followRoom(context: android.content.Context) =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getBoolean("follow_room", true)
+
+    fun setFollowRoom(context: android.content.Context, on: Boolean) =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean("follow_room", on).apply()
+
     var RIM = Rim.CHAMPAGNE
         private set
 

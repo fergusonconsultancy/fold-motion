@@ -33,3 +33,44 @@ jobs:
         with:
           name: FoldMotion-apk
           path: app/build/outputs/apk/debug/*.apk
+
+  # Holds the Fanale opening at three moments in each light (daylight, dusk, dark) on an emulator,
+  # fails if the app crashed, and keeps the screenshots on the screens branch.
+  emulator-test:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: FoldMotion-apk
+
+      - name: Name the APK
+        run: cp *.apk FoldMotion.apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: bash tools/emulator_test.sh
+
+      - name: Push screenshots to the screens branch
+        if: always()
+        run: |
+          mkdir -p /tmp/s && cp shot-*.png app-log.txt /tmp/s/ 2>/dev/null || true
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git checkout --orphan screens && git rm -rqf . && cp /tmp/s/* . 2>/dev/null || true
+          git add -A && git commit -qm "Screens for run ${{ github.run_number }}" && git push -f origin screens
