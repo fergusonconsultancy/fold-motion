@@ -245,6 +245,20 @@ class FoldOverlayView(context: Context) : View(context) {
         rebuildFilter()
     }
 
+    /**
+     * The light for this run (11 Nov 2026): warmth from the hour as before, and from the room's
+     * darkness (Ambient, 0 daylight to 1 dark) both how bright the light is and how the lamps look.
+     * Replaces the clock-only dimming whenever the room has been read.
+     */
+    fun setLight(hour: Int, darkness: Float) {
+        setTimeOfDay(hour)
+        val d = FoldMath.clamp(darkness)
+        rosso.darkness = d; visconti.darkness = d
+        // About a third dimmer in the dark, as the clock did at night, but now following the room
+        todBright = 1f - 0.32f * FoldMath.smooth(FoldMath.clamp((d - 0.3f) / 0.7f))
+        rebuildFilter()
+    }
+
     private fun rebuildFilter() {
         val sepia = todSepia
         val bright = todBright * brightness

@@ -62,6 +62,45 @@ class Lamps(rosso: Boolean) {
     private val arcBox = android.graphics.RectF()
     private val m = Matrix()
 
+    /**
+     * The room's light (Ambient, 11 Nov 2026), 0 daylight to 1 dark, set once per run. It changes
+     * how the lamp looks, not just how bright it is: by day the housing shows and the light is
+     * crisp; at dusk a halo forms and unlit beads hold embers; in the dark the housing disappears,
+     * the light blooms and casts onto what is around it, at a lower absolute brightness.
+     */
+    var darkness = 0.5f
+        set(v) { field = FoldMath.clamp(v); stageFactors() }
+
+    // Derived once per run, not per bead
+    private var housing = 1f      // the physical lamp: lens, rim, bezel
+    private var bezel = 0f        // the outer housing that only shows by day
+    private var emberShow = 1f    // whether unlit beads glow
+    private var darkBead = 0f     // unlit LEDs seen as dark beads by day
+    private var glowReach = 5.2f  // how far a bead's light spreads
+    private var glowStrength = 0.55f
+    private var bodyCast = 0.55f  // light thrown on the bodywork and content
+    private var level0 = 1f       // absolute brightness: a touch lower in the dark
+    private var bloomK = 1f
+
+    private fun stageFactors() {
+        val d = darkness
+        fun sm(a: Float, b: Float) = FoldMath.smooth(FoldMath.clamp((d - a) / (b - a)))
+        housing = 1f - sm(0.45f, 0.9f)
+        bezel = 1f - sm(0.05f, 0.45f)
+        emberShow = sm(0.3f, 0.6f)
+        darkBead = (1f - sm(0.2f, 0.5f))
+        glowReach = 2.6f + 3.8f * sm(0.15f, 0.95f)
+        glowStrength = 0.24f + 0.40f * sm(0.15f, 0.85f)
+        bodyCast = 0.75f * sm(0.35f, 1f)
+        level0 = 1f - 0.18f * sm(0.6f, 1f)
+        bloomK = 0.35f + 0.65f * sm(0.25f, 0.9f)
+    }
+
+    init { stageFactors() }
+
+    private val bezelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Color.rgb(92, 94, 98) }
+    private val ledPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(48, 30, 32) }
+
     /** Per-bead brightness, filled by the effect each frame: [side][index], ring first, then bar. */
     val level = Array(2) { FloatArray(RING_BEADS + BAR_BEADS) }
 
@@ -227,20 +266,28 @@ class Lamps(rosso: Boolean) {
         val bx = (outer + w / 2f + offset) / 2f
         m.setScale(br * 1.5f, br); m.postTranslate(bx, cy)
         bodyShader.setLocalMatrix(m)
-        bodyPaint.alpha = (255 * min(1f, 0.55f * mean * fade)).toInt()
-        canvas.drawRect(bx - br * 1.5f, cy - br, bx + br * 1.5f, cy + br, bodyPaint)
-        // The lens and its rim
-        lensPaint.alpha = (255 * fade).toInt()
-        canvas.drawCircle(outer, cy, ringR * 0.8f, lensPaint)
-        rimPaint.strokeWidth = ringR * 0.05f
-        rimPaint.alpha = (255 * 0.22f * fade).toInt()
-        canvas.drawCircle(outer, cy, ringR * 0.62f, rimPaint)
+        bodyPaint.alpha = (255 * min(1f, bodyCast * mean * fade)).toInt()
+        if (bodyPaint.alpha > 0) canvas.drawRect(bx - br * 1.5f, cy - br, bx + br * 1.5f, cy + br, bodyPaint)
+        // By day, the lamp is an object: its outer housing, a bezel round the ring
+        if (bezel > 0.01f) {
+            bezelPaint.strokeWidth = ringR * 0.09f
+            bezelPaint.alpha = (255 * 0.55f * bezel * fade).toInt()
+            canvas.drawCircle(outer, cy, ringR * 1.22f, bezelPaint)
+        }
+        // The lens and its rim, fading out in the dark until only light is left
+        if (housing > 0.01f) {
+            lensPaint.alpha = (255 * fade * housing).toInt()
+            canvas.drawCircle(outer, cy, ringR * 0.8f, lensPaint)
+            rimPaint.strokeWidth = ringR * 0.05f
+            rimPaint.alpha = (255 * (0.22f + 0.2f * bezel) * fade * housing).toInt()
+            canvas.drawCircle(outer, cy, ringR * 0.62f, rimPaint)
+        }
         // The tube under the ring's beads, lit bead by bead
         tubePaint.strokeWidth = ringR * 0.15f
         arcBox.set(outer - ringR, cy - ringR, outer + ringR, cy + ringR)
         val span = 360f / RING_BEADS
         for (i in 0 until RING_BEADS) {
-            val a = 0.32f * lv[i] * fade
+            val a = 0.32f * lv[i] * fade * level0 * (if (lv[i] <= EMBER + 0.01f) emberShow else 1f)
             if (a <= 0.01f) continue
             tubePaint.alpha = (255 * min(1f, a)).toInt()
             canvas.drawArc(arcBox, Math.toDegrees(ringAngle(side, i).toDouble()).toFloat() - span * 0.6f, span * 1.2f, false, tubePaint)
@@ -260,23 +307,33 @@ class Lamps(rosso: Boolean) {
         }
     }
 
-    fun bead(canvas: Canvas, x: Float, y: Float, rc: Float, lvl: Float) {
+    fun bead(canvas: Canvas, x: Float, y: Float, rc: Float, lvl0: Float) {
+        if (lvl0 <= 0.006f) return
+        val ca = FoldMath.clamp((lvl0 - EMBER) / (LIT - EMBER))
+        // By day an unlit LED is a dark bead in its housing, not a glow
+        if (darkBead > 0.01f && ca < 0.5f) {
+            ledPaint.alpha = (255 * darkBead * housing * (1f - 2f * ca) * min(1f, lvl0 / EMBER)).toInt()
+            canvas.drawCircle(x, y, rc * 0.9f, ledPaint)
+        }
+        // Embers only glow once the room is dim enough to see them
+        val lvl = lvl0 * level0 * (if (ca < 0.01f) emberShow else 1f)
         if (lvl <= 0.006f) return
-        val rg = rc * 5.2f
+        val rg = rc * glowReach
         m.setScale(rg, rg); m.postTranslate(x, y)
         glowShader.setLocalMatrix(m)
-        glowPaint.alpha = (255 * min(1f, 0.55f * lvl)).toInt()
+        glowPaint.alpha = (255 * min(1f, glowStrength * lvl)).toInt()
         canvas.drawRect(x - rg, y - rg, x + rg, y + rg, glowPaint)
         // The core only shows once a bead is properly lit: embers are glow alone
-        val ca = FoldMath.clamp((lvl - EMBER) / (LIT - EMBER))
         if (ca > 0.01f) {
-            corePaint.alpha = (255 * min(1f, ca * 0.95f)).toInt()
+            corePaint.alpha = (255 * min(1f, ca * 0.95f * level0)).toInt()
             canvas.drawCircle(x, y, rc, corePaint)
         }
     }
 
     /** A soft light at (x, y) in the lamp's colour: the bloom, the seam and the last point of light. */
-    fun glow(canvas: Canvas, x: Float, y: Float, rx: Float, ry: Float, alpha: Float) {
+    fun glow(canvas: Canvas, x: Float, y: Float, rx: Float, ry: Float, alpha0: Float) {
+        // A bloom belongs to the dark: by day it is a fraction of itself
+        val alpha = alpha0 * bloomK
         if (alpha <= 0.004f) return
         m.setScale(rx, ry); m.postTranslate(x, y)
         glowShader.setLocalMatrix(m)

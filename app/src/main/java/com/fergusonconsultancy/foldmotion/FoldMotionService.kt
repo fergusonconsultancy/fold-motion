@@ -165,10 +165,11 @@ class FoldMotionService : Service(), SensorEventListener {
                 // phone is exactly when the 0 to 90 degree step matters most. It reports only
                 // on change (three positions), so the cost is negligible.
                 Intent.ACTION_SCREEN_OFF -> {
+                    Ambient.stop(sensorManager)
                     if (phase != Phase.ARMED && phase != Phase.AWAIT_UNLOCK) finish()
                     EventLog.add(context, "Screen off (still listening for the hinge)")
                 }
-                Intent.ACTION_SCREEN_ON -> { startListening(); EventLog.add(context, "Screen on") }
+                Intent.ACTION_SCREEN_ON -> { startListening(); Ambient.start(sensorManager); EventLog.add(context, "Screen on") }
                 Intent.ACTION_USER_PRESENT -> {
                     if (phase == Phase.AWAIT_UNLOCK) {
                         EventLog.add(context, "Unlocked: reveal starts now")
@@ -270,6 +271,8 @@ class FoldMotionService : Service(), SensorEventListener {
 
         addOverlay()
         startListening()
+        // The room's light, read while the screen is on so a reading is ready when a fold begins
+        Ambient.start(sensorManager)
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
@@ -282,6 +285,7 @@ class FoldMotionService : Service(), SensorEventListener {
     override fun onDestroy() {
         EventLog.add(this, "Service stopped")
         stopListening()
+        if (::sensorManager.isInitialized) Ambient.stop(sensorManager)
         runCatching { unregisterReceiver(screenReceiver) }
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         windowContext?.let { runCatching { it.unregisterComponentCallbacks(displayCallbacks) } }
@@ -554,7 +558,7 @@ class FoldMotionService : Service(), SensorEventListener {
     private fun startClose(now: Long, scale: Float) {
         overlay?.mode = FoldOverlayView.Mode.CLOSE
         overlay?.creaseAcross = creaseRunsAcross()
-        overlay?.setTimeOfDay(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
+        java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY).let { hr -> overlay?.setLight(hr, Ambient.darkness(this, hr)) }
         // Planned backwards from when this owner's closes usually switch to the cover:
         // the finale always gets its full length and lands just before the switch
         val predicted = Timing.predictedSwitchMs(this)
@@ -619,7 +623,7 @@ class FoldMotionService : Service(), SensorEventListener {
 
     private fun startReveal(afterUnlock: Boolean = false) {
         mainHandler.removeCallbacks(armDeadline)
-        overlay?.setTimeOfDay(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
+        java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY).let { hr -> overlay?.setLight(hr, Ambient.darkness(this, hr)) }
         // The lock screen sits above every app overlay, so a reveal played now would be
         // hidden behind it. Hold the cover and play the reveal the moment it unlocks.
         val locked = runCatching {
