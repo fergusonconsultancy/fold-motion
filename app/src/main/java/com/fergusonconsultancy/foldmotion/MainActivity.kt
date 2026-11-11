@@ -382,6 +382,8 @@ class Stage(ctx: Context) : FrameLayout(ctx) {
 
     /** Holds one frame of the opening at [p] (1 closed, 0 open), for screenshots of each light. */
     fun hold(p: Float) {
+        // Not laid out yet: try again once the stage has a size
+        if (width == 0 || height == 0) { postDelayed({ hold(p) }, 120); return }
         anim?.cancel()
         MotionConfig.apply(context)
         overlay.mode = FoldOverlayView.Mode.OPEN
