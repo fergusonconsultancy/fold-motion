@@ -215,7 +215,7 @@ class MainActivity : Activity(), SensorEventListener {
         super.onResume()
         hingeSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
         refresh()
-        stage.postDelayed({ stage.play(open = true) }, 450)
+        if (intent?.hasExtra("hold") != true) stage.postDelayed({ stage.play(open = true) }, 450)
     }
 
     override fun onPause() {
