@@ -4,6 +4,9 @@
 set -x
 PKG=com.fergusonconsultancy.foldmotion
 adb install -r FoldMotion.apk
+adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS || true
+adb shell wm dismiss-keyguard; adb shell input keyevent 82
+adb shell settings put system screen_off_timeout 1800000
 adb logcat -c
 # Fanale chosen before the app opens
 printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map><string name="style">FANALE</string><string name="opening_effect">FANALE</string><string name="closing_effect">FANALE</string></map>\n' > fm.xml
@@ -15,6 +18,8 @@ for light in 0.05 0.5 0.95; do
     adb shell am force-stop $PKG
     adb shell am start -n $PKG/.MainActivity --es hold "$light,$p"
     sleep 4
+    adb shell wm dismiss-keyguard
+    sleep 1
     adb exec-out screencap -p > "shot-light$light-p$p.png"
   done
 done
