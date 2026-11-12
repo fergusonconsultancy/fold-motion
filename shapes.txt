@@ -1,0 +1,4 @@
+::notice::Settings, cover-portrait (one column): stage [40, 316, 783, 956] and action [40, 1113, 783, 1227] in view 823x1872
+::notice::Settings, cover-landscape (two panes): stage [250, 88, 741, 512] and action [48, 669, 944, 783] in view 1920x775
+::notice::Settings, main-portrait (two panes): stage [42, 386, 737, 985] and action [42, 1123, 737, 1224] in view 1503x1526
+::notice::Settings, main-landscape (two panes): stage [42, 339, 770, 966] and action [42, 1104, 770, 1205] in view 1568x1461
