@@ -4,11 +4,16 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: actions/setup-java@v4
         with:
@@ -34,7 +39,21 @@ jobs:
           name: FoldMotion-apk
           path: app/build/outputs/apk/debug/*.apk
 
-  # Holds the Fanale opening at three moments in each light (daylight, dusk, dark) on an emulator,
+      # Each build on main is published as a release with the APK, so it installs from a plain link;
+      # other branches publish a pre-release, to try before merging
+      - name: Name the APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk FoldMotion.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Fold Motion build ${{ github.run_number }}${{ github.ref != 'refs/heads/main' && format(' ({0})', github.ref_name) || '' }}
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
+          files: FoldMotion.apk
+
+  # Photographs the settings in the four shapes, then holds the Fanale opening at three moments in each light (daylight, dusk, dark) on an emulator,
   # fails if the app crashed, and keeps the screenshots on the screens branch.
   emulator-test:
     needs: build
@@ -70,7 +89,7 @@ jobs:
       - name: Push screenshots to the screens branch
         if: always()
         run: |
-          mkdir -p /tmp/s && cp shot-*.png app-log.txt /tmp/s/ 2>/dev/null || true
+          mkdir -p /tmp/s && cp shot-*.png shapes.txt app-log.txt /tmp/s/ 2>/dev/null || true
           git config user.name "github-actions"; git config user.email "actions@github.com"
           git checkout --orphan screens && git rm -rqf . && cp /tmp/s/* . 2>/dev/null || true
           git add -A && git commit -qm "Screens for run ${{ github.run_number }}" && git push -f origin screens

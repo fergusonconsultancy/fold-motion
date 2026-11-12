@@ -15,3 +15,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "FoldMotion"
 include(":app")
+include(":kit")
+project(":kit").projectDir = file("kit/kit")

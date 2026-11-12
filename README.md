@@ -12,12 +12,20 @@ A fold transition for the Galaxy Z Fold8 Ultra. Three styles, chosen in the app:
 
 The effect learns your closing speed and fits itself inside it, measures its own frame timing, and restarts itself if the phone kills it.
 
+## The Kit
+
+Colours, type, the settings controls, the doctrine and crash reports come from Cerniera's Kit
+(cerniera-studio/kit), a git submodule at `kit/` pinned to a commit. Clone with
+`git clone --recurse-submodules`; to take the Kit's latest, run `git submodule update --remote kit`
+and commit. The transitions themselves (the overlay, the lamps, the membrane) are Fold Motion's own.
+
 ## Get the APK (no Android Studio needed)
 
 1. Push this folder to a GitHub repository.
 2. Open the repository's **Actions** tab. The **Build APK** workflow runs on every push.
-3. When it goes green, open the run and download **FoldMotion-apk**.
-4. Unzip it, copy the `.apk` to the phone and open it. Allow installs from that source when asked.
+3. When it goes green, each build on main is published under **Releases** as `FoldMotion.apk`
+   (builds from other branches appear as pre-releases).
+4. Download it on the phone and open the `.apk` to the phone and open it. Allow installs from that source when asked.
 
 ## First run on the phone
 
