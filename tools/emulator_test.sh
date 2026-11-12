@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run by the emulator job: the Fanale opening held at three moments in each of the three lights
+# Run by the emulator job: first the four shapes (tools/shapes.sh), then the Fanale opening held at three moments in each of the three lights
 # (daylight, dusk, dark), so the lamps' look can be compared. Fails if the app crashed.
 set -x
 PKG=com.fergusonconsultancy.foldmotion
@@ -8,6 +8,8 @@ adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS || true
 adb shell wm dismiss-keyguard; adb shell input keyevent 82
 adb shell settings put system screen_off_timeout 1800000
 adb logcat -c
+# The four shapes first, so they always report
+bash tools/shapes.sh
 # Fanale chosen before the app opens
 printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map><string name="style">FANALE</string><string name="opening_effect">FANALE</string><string name="closing_effect">FANALE</string></map>\n' > fm.xml
 adb shell am start -n $PKG/.MainActivity; sleep 4; adb shell am force-stop $PKG

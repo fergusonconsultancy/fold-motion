@@ -9,8 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.fergusonconsultancy.foldmotion"
-        // Hinge angle sensor arrived in Android 11 (API 30)
-        minSdk = 30
+        minSdk = 31  // the Kit needs Android 12; the Fold runs far newer
         targetSdk = 35
         // Each GitHub build gets a higher number so it installs as an update
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
@@ -52,4 +51,6 @@ dependencies {
     implementation("androidx.window:window:1.3.0")
     implementation("androidx.window:window-java:1.3.0")
     implementation("androidx.core:core:1.13.1")
+    // Cerniera's Kit: palette, type, controls, the doctrine and crash reports (git submodule at kit/)
+    implementation(project(":kit"))
 }

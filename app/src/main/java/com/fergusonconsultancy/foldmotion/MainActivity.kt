@@ -31,6 +31,7 @@ import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.cerniera.kit.*
 
 /**
  * Fold Motion's settings, rebuilt to Bellezza Necessaria (23 Oct 2026). The transition itself
@@ -60,6 +61,9 @@ class MainActivity : Activity(), SensorEventListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Fold Motion keeps Visconti (night) in either light: the stage's lamps are judged against it
+        Kit.dark = true
+        if (Crash.show(this, "Fold Motion")) return
         window.statusBarColor = Kit.GROUND
         window.navigationBarColor = Kit.GROUND
         MotionConfig.apply(this)
@@ -67,15 +71,20 @@ class MainActivity : Activity(), SensorEventListener {
         hingeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
 
         screen = Screen(this, "Fold Motion", "Galaxy Z Fold 8 Ultra")
+        val panes = Panes(this, screen)
 
-        // ---- The stage: the transition, live
+        // ---- The stage: the transition, live, with its light and the one main action beneath,
+        // in view at rest in every shape (a pane of its own when the screen is wide)
         stage = Stage(this)
-        screen.add(stage, px(26))
+        panes.add(stage)
         // The light the stage plays in: the room as the sensor reads it, or each stage to compare
         val lights = listOf<Float?>(null, 0.05f, 0.5f, 0.95f)
-        screen.add(Segmented(this, listOf("Room", "Daylight", "Dusk", "Dark"), 0) { i ->
+        panes.add(Segmented(this, listOf("Room", "Daylight", "Dusk", "Dark"), 0) { i ->
             stage.light = lights[i]; stage.play(open = true)
         }, px(12))
+        actionSlot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        panes.add(actionSlot, px(18))
+        val root = panes.build()
 
         // ---- Presets: a matched opening and closing in one tap
         screen.section("Transition")
@@ -145,9 +154,6 @@ class MainActivity : Activity(), SensorEventListener {
         }
         screen.add(Card(this).apply { row(overlayRow); row(backgroundRow) })
 
-        actionSlot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        screen.add(actionSlot, px(28))
-
         // ---- Doctrine, notes, diagnostics
         screen.section("Doctrine")
         screen.add(doctrineCard(DOCTRINE_NOTES))
@@ -163,7 +169,8 @@ class MainActivity : Activity(), SensorEventListener {
         diag.body.addView(primary("Clear log", filled = false) { EventLog.clear(this); refresh() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(16) })
         screen.add(diag)
 
-        setContentView(screen.root)
+        setContentView(root)
+        panes.record(root, stage, actionSlot)
 
         // For the emulator walk-through: hold the stage at one frame in a given light
         intent?.getStringExtra("hold")?.let { arg ->
@@ -201,11 +208,11 @@ class MainActivity : Activity(), SensorEventListener {
         val sKey = if (open) "open_speed" else "close_speed"
         val pct = { v: Float -> if (kotlin.math.abs(v - 1f) < 0.01f) "As designed" else "${(v * 100).toInt()}%" }
         addView(Slider(this@MainActivity, "Brightness", MotionConfig.BRIGHTNESS_MIN, MotionConfig.BRIGHTNESS_MAX,
-            if (open) MotionConfig.openBrightness(this@MainActivity) else MotionConfig.closeBrightness(this@MainActivity), format = pct) {
+            if (open) MotionConfig.openBrightness(this@MainActivity) else MotionConfig.closeBrightness(this@MainActivity), centre = 1f, format = pct) {
             MotionConfig.setTuning(this@MainActivity, bKey, it); stage.play(open)
         })
         addView(Slider(this@MainActivity, "Speed", MotionConfig.SPEED_MIN, MotionConfig.SPEED_MAX,
-            if (open) MotionConfig.openSpeed(this@MainActivity) else MotionConfig.closeSpeed(this@MainActivity),
+            if (open) MotionConfig.openSpeed(this@MainActivity) else MotionConfig.closeSpeed(this@MainActivity), centre = 1f,
             format = { v -> if (kotlin.math.abs(v - 1f) < 0.01f) "As designed" else "%.2fx".format(v) }) {
             MotionConfig.setTuning(this@MainActivity, sKey, it); stage.play(open)
         })
@@ -313,7 +320,9 @@ class MainActivity : Activity(), SensorEventListener {
  * gather beneath it and recede a few seconds after the last touch.
  */
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
-class Stage(ctx: Context) : FrameLayout(ctx) {
+class Stage(ctx: Context) : FrameLayout(ctx), Fits {
+    /** In a wide shape, how tall the pane lets the stage be; 0 when only the width decides. */
+    override var maxH = 0
     private val content = SampleScreen(ctx)
     private val overlay = FoldOverlayView(ctx)
     private val controls = LinearLayout(ctx)
@@ -363,16 +372,19 @@ class Stage(ctx: Context) : FrameLayout(ctx) {
         // Hidden controls take no taps: the first touch only brings them to the surface
         if (on) controls.visibility = View.VISIBLE
         controls.animate().alpha(if (on) 1f else 0f).translationY(if (on) 0f else context.px(14).toFloat())
-            .setDuration(if (on) 260 else 380).setInterpolator(Kit.ease)
+            .setDuration(if (on) Kit.SETTLE else 380).setInterpolator(Kit.ease)
             .withEndAction { if (!on) controls.visibility = View.INVISIBLE }.start()
-        if (on) postDelayed(hide, 3200)
+        if (on) postDelayed(hide, Kit.RECEDE_MS)
     }
 
     fun setHinge(a: Float) { hinge.text = "HINGE ${a.toInt()}°" }
 
     override fun onMeasure(w: Int, h: Int) {
-        val width = MeasureSpec.getSize(w)
-        super.onMeasure(w, MeasureSpec.makeMeasureSpec((width / 1.16f).toInt(), MeasureSpec.EXACTLY))
+        // Always the same shape; in a short pane it shrinks to the height rather than being cut off
+        var width = MeasureSpec.getSize(w)
+        var height = (width / 1.16f).toInt()
+        if (maxH in 1 until height) { height = maxH; width = (height * 1.16f).toInt() }
+        super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
     }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
