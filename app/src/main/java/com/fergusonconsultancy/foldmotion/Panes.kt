@@ -95,7 +95,9 @@ class Panes(private val a: Activity, val screen: Screen) {
                 if (live.height <= 0 || action.height <= 0 || root.height <= 0) return
                 fun box(v: View): String { val p = IntArray(2); v.getLocationInWindow(p); return "[${p[0]}, ${p[1]}, ${p[0] + v.width}, ${p[1] + v.height}]" }
                 val inset = root.rootWindowInsets?.getInsets(WindowInsets.Type.systemBars())
-                val json = "{\"wide\": $wide, \"view\": [${root.width}, ${root.height}], \"insets\": [${inset?.left ?: 0}, ${inset?.top ?: 0}, ${inset?.right ?: 0}, ${inset?.bottom ?: 0}], " +
+                // Boxes are in window coordinates; origin is where the view itself starts in them
+                val o = IntArray(2).also { root.getLocationInWindow(it) }
+                val json = "{\"wide\": $wide, \"origin\": [${o[0]}, ${o[1]}], \"view\": [${root.width}, ${root.height}], \"insets\": [${inset?.left ?: 0}, ${inset?.top ?: 0}, ${inset?.right ?: 0}, ${inset?.bottom ?: 0}], " +
                     "\"live\": ${box(live)}, \"action\": ${box(action)}}"
                 runCatching { java.io.File(a.filesDir, "layout.json").writeText(json) }
             }

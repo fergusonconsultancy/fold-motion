@@ -26,9 +26,12 @@ try:
 except Exception:
     print(f"::error::{name}: no layout recorded"); sys.exit(0)
 vw, vh = d["view"]; il, it, ir, ib = d["insets"]
+ox, oy = d.get("origin", [0, 0])
 bad = []
 for k in ("live", "action"):
+    # The boxes are in window coordinates; the view starts at origin within the window
     l, t, r, b = d[k]
+    l -= ox; r -= ox; t -= oy; b -= oy
     if l < 0 or t < 0 or r > vw or b > vh - ib: bad.append(f"{k} at {d[k]} leaves the view {vw}x{vh} (bottom bar {ib})")
     if r - l < 40 or b - t < 20: bad.append(f"{k} is too small: {d[k]}")
 lay = "two panes" if d["wide"] else "one column"
